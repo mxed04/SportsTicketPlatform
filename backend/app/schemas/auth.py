@@ -8,8 +8,7 @@ class OTPRequest(BaseModel):
         pattern=r"^09[0-9]{9}$",
         examples=["09123456789"],
         description=(
-            "Must be a valid 11-digit Iranian phone number "
-            "starting with 09"
+            "Must be a valid 11-digit Iranian phone number " "starting with 09"
         ),
     )
     model_config = ConfigDict(
@@ -34,9 +33,9 @@ class UserSignup(BaseModel):
     )
     otp_code: str = Field(
         ...,
-        min_length=5,
-        max_length=5,
-        examples=["12345"],
+        min_length=6,
+        max_length=6,
+        examples=["123456"],
     )
     first_name: str = Field(
         ...,
@@ -60,7 +59,7 @@ class UserSignup(BaseModel):
                 "phone_number": "09123456789",
                 "email": "test@example.com",
                 "password": "StrongPassword123!",
-                "otp_code": "12345",
+                "otp_code": "123456",
                 "first_name": "Ali",
                 "last_name": "Rezaei",
                 "city": "Tehran",
@@ -77,7 +76,6 @@ class UserLogin(BaseModel):
 # --- Output Models (Response) ---
 class OTPResponse(BaseModel):
     message: str
-    otp: str
     expires_in: str
 
 
