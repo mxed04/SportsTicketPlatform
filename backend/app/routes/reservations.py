@@ -36,12 +36,21 @@ def get_current_user_id(token: str = Depends(oauth2_scheme)) -> int:
         )
 
 
-async def expiration_reminder_task(reservation_id: int, user_id: int):
+# 🔴 Upgrading the function to full lifecycle management
+# (reminders + automatic cancellation)
+async def reservation_lifecycle_task(
+    reservation_id: int,
+    user_id: int,
+    ticket_id: int,
+):
+    # Step 1: A 13-minute wait for the reminder.
     await asyncio.sleep(13 * 60)
     try:
         with get_db_cursor() as cursor:
             cursor.execute(
-                "SELECT status FROM reservations WHERE reservation_id = %s;",
+                "SELECT status "
+                "FROM reservations "
+                "WHERE reservation_id = %s;",
                 (reservation_id,),
             )
             result = cursor.fetchone()
@@ -55,8 +64,56 @@ async def expiration_reminder_task(reservation_id: int, user_id: int):
                     user_id,
                     reservation_id,
                 )
+            else:
+                # If paid or cancelled, no need to proceed.
+                return
     except Exception as e:
-        logger.error("Error in background task: %s", str(e))
+        logger.error("Error in reminder task phase: %s", str(e))
+        return
+
+    # Step 2: Final 2-minute wait and definitive cancellation (15 min total)
+    await asyncio.sleep(2 * 60)
+    try:
+        with get_db_cursor() as cursor:
+            # Using FOR UPDATE to prevent conflicts with concurrent payments.
+            select_reservation_status_query = (
+                "SELECT status FROM reservations WHERE reservation_id = %s "
+                "FOR UPDATE;"
+            )
+            cursor.execute(select_reservation_status_query, (reservation_id,))
+            res = cursor.fetchone()
+
+            if res and res["status"] == "pending":
+                # Cancel the reservation
+                cursor.execute(
+                    "UPDATE reservations SET status = 'cancelled' "
+                    "WHERE reservation_id = %s;",
+                    (reservation_id,),
+                )
+                # Update the ticket's remaining capacity
+                update_ticket_capacity_query = (
+                    "UPDATE tickets SET remaining_capacity = "
+                    "remaining_capacity + 1 "
+                    "WHERE ticket_id = %s;"
+                )
+                cursor.execute(
+                    update_ticket_capacity_query,
+                    (ticket_id,),
+                )
+                cursor.connection.commit()
+
+                # Clear the cache to reflect the updated ticket availability
+                clear_ticket_cache()
+                logger.info(
+                    (
+                        "🚫 [EXPIRED] Reservation %s for user %s expired "
+                        "and was auto-cancelled."
+                    ),
+                    reservation_id,
+                    user_id,
+                )
+    except Exception as e:
+        logger.error("Error in auto-cancellation task phase: %s", str(e))
 
 
 @router.post(
@@ -75,11 +132,12 @@ def reserve_ticket(
 ):
     try:
         with get_db_cursor() as cursor:
-            cursor.execute(
+            select_ticket_query = (
                 "SELECT remaining_capacity FROM tickets "
-                "WHERE ticket_id = %s FOR UPDATE;",
-                (data.ticket_id,),
+                "WHERE ticket_id = %s "
+                "FOR UPDATE;"
             )
+            cursor.execute(select_ticket_query, (data.ticket_id,))
             ticket = cursor.fetchone()
             if not ticket:
                 raise HTTPException(status_code=404, detail="Ticket not found")
@@ -100,8 +158,8 @@ def reserve_ticket(
                 raise HTTPException(
                     status_code=400,
                     detail=(
-                        "You already have an active reservation for "
-                        "this ticket"
+                        "You already have an active reservation "
+                        "for this ticket"
                     ),
                 )
 
@@ -115,7 +173,8 @@ def reserve_ticket(
             insert_reservation_query = (
                 "INSERT INTO reservations "
                 "(user_id, ticket_id, status, expires_at) "
-                "VALUES (%s, %s, 'pending', NOW() + INTERVAL '15 minutes') "
+                "VALUES (%s, %s, 'pending', "
+                "NOW() + INTERVAL '15 minutes') "
                 "RETURNING reservation_id, expires_at;"
             )
             cursor.execute(
@@ -126,10 +185,13 @@ def reserve_ticket(
 
             cursor.connection.commit()
             clear_ticket_cache()
+
+            # 🔴 Executing the upgraded task in the background
             background_tasks.add_task(
-                expiration_reminder_task,
+                reservation_lifecycle_task,
                 reservation["reservation_id"],
                 user_id,
+                data.ticket_id,
             )
 
             return {
