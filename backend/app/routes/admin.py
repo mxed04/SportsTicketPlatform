@@ -1,13 +1,34 @@
-from fastapi import APIRouter, HTTPException, status, Depends
-from app.schemas.admin import (
-    DashboardStatsResponse,
-    AdminManageRequest,
-    AdminReservationResponse,
-)
+from fastapi import APIRouter, Depends, HTTPException, status
 from app.database import get_db_cursor
 from app.routes.reservations import get_current_user_id
+from app.schemas.admin import (
+    AdminManageRequest,
+    AdminReservationResponse,
+    DashboardStatsResponse,
+)
 
 router = APIRouter(prefix="/api/admin", tags=["Admin Dashboard"])
+
+
+def verify_admin_or_support_role(
+    user_id: int = Depends(get_current_user_id),
+) -> int:
+    """
+    Access level validation: Only users with the 'admin' or 'support' role are
+    permitted to access. Otherwise, a 403 Forbidden error is returned.
+    """
+    with get_db_cursor() as cursor:
+        cursor.execute(
+            "SELECT role FROM users WHERE user_id = %s;",
+            (user_id,),
+        )
+        user = cursor.fetchone()
+        if not user or user["role"] not in ("admin", "support"):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied. Admin or Support role required.",
+            )
+    return user_id
 
 
 @router.get(
@@ -16,7 +37,9 @@ router = APIRouter(prefix="/api/admin", tags=["Admin Dashboard"])
     status_code=status.HTTP_200_OK,
     summary="Get aggregated statistics for the admin dashboard",
 )
-def get_dashboard_statistics(_: int = Depends(get_current_user_id)):
+def get_dashboard_statistics(
+    user_id: int = Depends(verify_admin_or_support_role),
+):
     try:
         with get_db_cursor() as cursor:
             sql = (
@@ -36,10 +59,12 @@ def get_dashboard_statistics(_: int = Depends(get_current_user_id)):
             )
             cursor.execute(sql)
             return cursor.fetchone()
-    except Exception:
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
         raise HTTPException(
-            status_code=500,
-            detail="Failed to fetch dashboard statistics.",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Database error: {str(e)}",
         )
 
 
@@ -47,44 +72,35 @@ def get_dashboard_statistics(_: int = Depends(get_current_user_id)):
     "/tickets",
     response_model=list[AdminReservationResponse],
     status_code=status.HTTP_200_OK,
-    summary="View all reservations and suspicious transactions "
-    "(Support/Admin)",
+    summary="Get all reservations and payment statuses for admin/support",
 )
-def get_all_reservations(user_id: int = Depends(get_current_user_id)):
+def get_admin_tickets(
+    user_id: int = Depends(verify_admin_or_support_role),
+):
     try:
         with get_db_cursor() as cursor:
-            check_query = "SELECT role FROM users WHERE user_id = %s;"
-            cursor.execute(check_query, (user_id,))
-            user = cursor.fetchone()
-
-            if not user or user["role"] not in ["support", "admin"]:
-                raise HTTPException(
-                    status_code=403,
-                    detail=(
-                        "Access denied. Support or Admin role required."
-                    ),
-                )
-
-            fetch_query = (
-                "SELECT "
-                "r.reservation_id, r.user_id, u.first_name, "
-                "u.last_name, u.phone_number, r.ticket_id, "
-                "t.venue_name, t.match_date, r.status, "
-                "p.amount AS payment_amount "
+            sql = (
+                "SELECT r.reservation_id, r.user_id, "
+                "u.first_name || ' ' || u.last_name AS user_name, "
+                "r.ticket_id, "
+                "t.home_team || ' vs ' || t.away_team AS match_title, "
+                "r.status AS reservation_status, "
+                "COALESCE(p.status, 'unpaid') AS payment_status, "
+                "r.reserved_at "
                 "FROM reservations r "
                 "JOIN users u ON r.user_id = u.user_id "
                 "JOIN tickets t ON r.ticket_id = t.ticket_id "
-                "LEFT JOIN payments p "
-                "ON r.reservation_id = p.reservation_id "
-                "ORDER BY r.reservation_id DESC LIMIT 100;"
+                "LEFT JOIN payments p ON r.reservation_id = p.reservation_id "
+                "ORDER BY r.reserved_at DESC;"
             )
-            cursor.execute(fetch_query)
+            cursor.execute(sql)
             return cursor.fetchall()
     except Exception as e:
         if isinstance(e, HTTPException):
             raise e
         raise HTTPException(
-            status_code=500, detail=f"Database error: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Database error: {str(e)}",
         )
 
 
@@ -92,64 +108,44 @@ def get_all_reservations(user_id: int = Depends(get_current_user_id)):
     "/manage",
     response_model=dict,
     status_code=status.HTTP_200_OK,
-    summary="Change status of reports or cancel/approve reservations",
+    summary="Manage entities (update report or reservation status)",
 )
 def manage_entity(
     data: AdminManageRequest,
-    user_id: int = Depends(get_current_user_id),
+    user_id: int = Depends(verify_admin_or_support_role),
 ):
     try:
         with get_db_cursor() as cursor:
-            cursor.execute(
-                "SELECT role FROM users WHERE user_id = %s",
-                (user_id,),
-            )
-            user = cursor.fetchone()
-            if not user or user["role"] not in ["support", "admin"]:
-                raise HTTPException(
-                    status_code=403,
-                    detail=(
-                        "Access denied. Support or Admin role required."
-                    ),
-                )
-
             if data.entity_type == "report":
-                cursor.execute(
+                sql = (
                     "UPDATE reports SET status = %s "
-                    "WHERE report_id = %s RETURNING report_id;",
-                    (data.new_status, data.entity_id),
-                )
-            elif data.entity_type == "reservation":
-                cursor.execute(
-                    "UPDATE reservations SET status = %s "
-                    "WHERE reservation_id = %s "
-                    "RETURNING reservation_id;",
-                    (data.new_status, data.entity_id),
+                    "WHERE report_id = %s RETURNING report_id;"
                 )
             else:
-                raise HTTPException(
-                    status_code=400,
-                    detail=(
-                        "Invalid entity type. Use 'report' or "
-                        "'reservation'."
-                    ),
+                sql = (
+                    "UPDATE reservations SET status = %s "
+                    "WHERE reservation_id = %s RETURNING reservation_id;"
                 )
+
+            cursor.execute(sql, (data.new_status, data.entity_id))
 
             if not cursor.fetchone():
                 raise HTTPException(
-                    status_code=404,
+                    status_code=status.HTTP_404_NOT_FOUND,
                     detail=f"{data.entity_type} not found in database.",
                 )
 
             cursor.connection.commit()
-            msg = (
-                f"{data.entity_type.capitalize()} status updated to "
-                f"'{data.new_status}' successfully."
-            )
-            return {"message": msg}
+            return {
+                "message": (
+                    f"{data.entity_type.capitalize()} status updated to "
+                    f"'{data.new_status}' successfully."
+                )
+            }
     except Exception as e:
         if isinstance(e, HTTPException):
             raise e
         raise HTTPException(
-            status_code=500, detail=f"Database error: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Database error: {str(e)}",
         )
