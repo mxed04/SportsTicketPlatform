@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.redis_client import check_redis_connection
 from app.database import get_db_cursor
@@ -17,6 +18,25 @@ app = FastAPI(
     title=settings.APP_NAME,
     version="3.0.0",
     description="SportsTicketPlatform API - Phase 3 (Raw SQL & Redis Cache)",
+)
+
+# 🔴 Fixing CORS settings for frontend communication
+origins = [
+    "http://localhost:3000",  # React / Next.js
+    "http://127.0.0.1:3000",
+    "http://localhost:5173",  # Vite (Vue/React)
+    "http://127.0.0.1:5173",
+    "http://localhost:8080",  # Vue CLI
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,  # Allow only specified origins for security
+    allow_credentials=True,  # Allow sending cookies and authentication tokens
+    allow_methods=[
+        "*"
+    ],  # Allow executing all methods (GET, POST, PUT, DELETE, OPTIONS)
+    allow_headers=["*"],  # Allow receiving all custom headers
 )
 
 app.include_router(auth.router)
