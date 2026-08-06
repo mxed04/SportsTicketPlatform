@@ -79,18 +79,17 @@ def get_admin_tickets(
 ):
     try:
         with get_db_cursor() as cursor:
+            # Fixed: SELECT columns aligned with AdminReservationResponse.
             sql = (
                 "SELECT r.reservation_id, r.user_id, "
-                "u.first_name || ' ' || u.last_name AS user_name, "
-                "r.ticket_id, "
-                "t.home_team || ' vs ' || t.away_team AS match_title, "
-                "r.status AS reservation_status, "
-                "COALESCE(p.status, 'unpaid') AS payment_status, "
-                "r.reserved_at "
+                "u.first_name, u.last_name, u.phone_number, "
+                "r.ticket_id, t.venue_name, "
+                "t.match_date, r.status, p.amount AS payment_amount "
                 "FROM reservations r "
                 "JOIN users u ON r.user_id = u.user_id "
                 "JOIN tickets t ON r.ticket_id = t.ticket_id "
-                "LEFT JOIN payments p ON r.reservation_id = p.reservation_id "
+                "LEFT JOIN payments p "
+                "ON r.reservation_id = p.reservation_id "
                 "ORDER BY r.reserved_at DESC;"
             )
             cursor.execute(sql)
