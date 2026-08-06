@@ -57,6 +57,20 @@ services:
       timeout: 5s
       retries: 3
 
+  celery_worker:
+    build:
+      context: ./backend
+    container_name: sports_ticket_celery
+    command: celery -A app.tasks.reservation_tasks.celery_app worker --loglevel=info
+    env_file:
+      - .env
+    depends_on:
+      postgres_db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: always
+
 volumes:
   postgres_data:
     driver: local
