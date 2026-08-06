@@ -15,7 +15,8 @@ def verify_admin_or_support_role(
 ) -> int:
     """
     Access level validation: Only users with the 'admin' or 'support' role are
-    permitted to access. Otherwise, a 403 Forbidden error is returned.
+    permitted to access.
+    Otherwise, a 403 Forbidden error is returned.
     """
     with get_db_cursor() as cursor:
         cursor.execute(
@@ -44,7 +45,8 @@ def get_dashboard_statistics(
         with get_db_cursor() as cursor:
             sql = (
                 "SELECT "
-                "(SELECT COALESCE(SUM(amount), 0) FROM payments "
+                "(SELECT COALESCE(SUM(amount), 0) "
+                "FROM payments "
                 "WHERE status = 'successful' AND amount > 0) "
                 "AS total_revenue, "
                 "(SELECT COUNT(*) FROM payments "
@@ -113,6 +115,19 @@ def manage_entity(
     data: AdminManageRequest,
     user_id: int = Depends(verify_admin_or_support_role),
 ):
+    # 🔴 New update: Validation of allowed values for the
+    # 'status' field in the reservations table.
+    if data.entity_type == "reservation":
+        valid_statuses = {"pending", "paid", "cancelled"}
+        if data.new_status not in valid_statuses:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"Invalid status '{data.new_status}' for reservation. "
+                    f"Allowed values: {', '.join(valid_statuses)}"
+                ),
+            )
+
     try:
         with get_db_cursor() as cursor:
             if data.entity_type == "report":
