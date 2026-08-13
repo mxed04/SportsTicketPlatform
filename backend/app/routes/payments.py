@@ -24,16 +24,15 @@ def process_payment(
 ):
     try:
         with get_db_cursor() as cursor:
-            # 🔴 Add a concurrency lock.
-            # Re-check the user's status while locked.
+            # Check if the user account is active
             cursor.execute(
-                "SELECT is_active FROM users " "WHERE user_id = %s;",
+                "SELECT is_active FROM users WHERE user_id = %s;",
                 (user_id,),
             )
             user = cursor.fetchone()
             if not user or not user["is_active"]:
                 raise HTTPException(
-                    status_code=403,
+                    status_code=status.HTTP_403_FORBIDDEN,
                     detail=(
                         "Your account has been deactivated. You "
                         "cannot make payments."
@@ -42,8 +41,7 @@ def process_payment(
 
             cursor.execute(
                 (
-                    "SELECT r.reservation_id, r.status, "
-                    "r.expires_at, "
+                    "SELECT r.reservation_id, r.status, r.expires_at, "
                     "(r.expires_at < NOW()) AS is_expired, t.price, "
                     "t.ticket_id FROM reservations r "
                     "JOIN tickets t ON r.ticket_id = t.ticket_id "
@@ -56,20 +54,19 @@ def process_payment(
             reservation = cursor.fetchone()
             if not reservation:
                 raise HTTPException(
-                    status_code=403,
-                    detail=(
-                        "Your account has been deactivated. You cannot "
-                        "cancel tickets."
-                    ),
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Reservation not found or does not belong to you",
                 )
+
             if reservation["status"] == "paid":
                 raise HTTPException(
-                    status_code=400,
+                    status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Reservation is already paid",
                 )
+
             if reservation["status"] == "cancelled":
                 raise HTTPException(
-                    status_code=400,
+                    status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Reservation has been cancelled",
                 )
 
@@ -91,18 +88,14 @@ def process_payment(
                 cursor.connection.commit()
                 clear_ticket_cache()
                 raise HTTPException(
-                    status_code=400,
-                    detail=(
-                        "Reservation expired. Ticket returned to "
-                        "the pool."
-                    ),
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Reservation expired. Ticket returned to the pool.",
                 )
 
             cursor.execute(
                 (
-                    "INSERT INTO payments "
-                    "(reservation_id, user_id, amount, payment_method, "
-                    "status, paid_at) "
+                    "INSERT INTO payments (reservation_id, user_id, "
+                    "amount, payment_method, status, paid_at) "
                     "VALUES (%s, %s, %s, %s, 'successful', NOW()) "
                     "RETURNING payment_id, paid_at;"
                 ),
@@ -114,6 +107,7 @@ def process_payment(
                 ),
             )
             payment = cursor.fetchone()
+
             cursor.execute(
                 (
                     "UPDATE reservations SET status = 'paid' "
@@ -134,8 +128,11 @@ def process_payment(
     except Exception as e:
         if isinstance(e, HTTPException):
             raise e
-        detail = "Database error: %s" % str(e)
-        raise HTTPException(status_code=500, detail=detail)
+        detail = f"Database error: {str(e)}"
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=detail,
+        )
 
 
 @router.get(
@@ -154,19 +151,15 @@ def calculate_cancellation_penalty(
 ):
     try:
         with get_db_cursor() as cursor:
-            # 🔴 Add a concurrency lock (FOR UPDATE).
-            # Re-check the user's status while locked.
+            # Check if the user account is active
             cursor.execute(
-                (
-                    "SELECT is_active FROM users "
-                    "WHERE user_id = %s FOR UPDATE;"
-                ),
+                "SELECT is_active FROM users WHERE user_id = %s;",
                 (user_id,),
             )
             user = cursor.fetchone()
             if not user or not user["is_active"]:
                 raise HTTPException(
-                    status_code=403,
+                    status_code=status.HTTP_403_FORBIDDEN,
                     detail=(
                         "Your account has been deactivated. You "
                         "cannot cancel tickets."
@@ -186,24 +179,26 @@ def calculate_cancellation_penalty(
             data = cursor.fetchone()
             if not data:
                 raise HTTPException(
-                    status_code=404,
+                    status_code=status.HTTP_404_NOT_FOUND,
                     detail="Reservation not found",
                 )
+
             if data["status"] != "paid":
                 raise HTTPException(
-                    status_code=400,
-                    detail=("Only 'paid' reservations can be cancelled"),
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Only 'paid' reservations can be cancelled",
                 )
 
             now = datetime.now()
             if data["match_date"] <= now:
                 raise HTTPException(
-                    status_code=400,
+                    status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Match has already started. Cannot cancel.",
                 )
 
             time_difference = data["match_date"] - now
             hours_until_match = time_difference.total_seconds() / 3600
+
             if hours_until_match < 24:
                 penalty_percentage = 50
             elif hours_until_match <= 72:
@@ -213,6 +208,7 @@ def calculate_cancellation_penalty(
 
             price = float(data["price"])
             penalty_amount = price * (penalty_percentage / 100)
+
             return {
                 "reservation_id": reservation_id,
                 "match_date": data["match_date"].isoformat(),
@@ -224,8 +220,11 @@ def calculate_cancellation_penalty(
     except Exception as e:
         if isinstance(e, HTTPException):
             raise e
-        detail = "Database error: %s" % str(e)
-        raise HTTPException(status_code=500, detail=detail)
+        detail = f"Database error: {str(e)}"
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=detail,
+        )
 
 
 @router.post(
@@ -244,8 +243,8 @@ def cancel_ticket(
     )
     try:
         with get_db_cursor() as cursor:
-            # 🔴 Add a concurrency lock (FOR UPDATE).
-            # Re-check the reservation status while locked.
+            # Concurrency lock (FOR UPDATE) on reservation row
+            # during cancellation
             cursor.execute(
                 "SELECT status, ticket_id FROM reservations "
                 "WHERE reservation_id = %s FOR UPDATE;",
@@ -255,12 +254,13 @@ def cancel_ticket(
 
             if not reservation:
                 raise HTTPException(
-                    status_code=404,
+                    status_code=status.HTTP_404_NOT_FOUND,
                     detail="Reservation not found.",
                 )
+
             if reservation["status"] != "paid":
                 raise HTTPException(
-                    status_code=400,
+                    status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Reservation is not in 'paid' status.",
                 )
 
@@ -271,6 +271,7 @@ def cancel_ticket(
                 ),
                 (request.reservation_id,),
             )
+
             cursor.execute(
                 (
                     "UPDATE tickets SET remaining_capacity = "
@@ -279,6 +280,7 @@ def cancel_ticket(
                 ),
                 (reservation["ticket_id"],),
             )
+
             cursor.connection.commit()
             clear_ticket_cache()
 
@@ -288,8 +290,10 @@ def cancel_ticket(
                 "penalty_applied": penalty_data["penalty_amount"],
             }
     except Exception as e:
-        # 🔴Adding proper handling for HTTPException errors.
         if isinstance(e, HTTPException):
             raise e
-        detail = "Database error: %s" % str(e)
-        raise HTTPException(status_code=500, detail=detail)
+        detail = f"Database error: {str(e)}"
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=detail,
+        )
