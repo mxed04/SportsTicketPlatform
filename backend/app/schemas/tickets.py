@@ -22,6 +22,8 @@ class TicketListResponse(BaseModel):
     source: str
     count: int
     tickets: list[TicketResponse]
+    # 🔴 Added: A list to hold fuzzy search suggestions when exact matches fail
+    suggestions: list[TicketResponse] | None = None
 
 
 class TicketDetailResponse(TicketResponse):
