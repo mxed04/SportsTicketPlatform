@@ -7,25 +7,18 @@ class OTPRequest(BaseModel):
         ...,
         pattern=r"^09[0-9]{9}$",
         description=(
-            "Must be a valid 11-digit Iranian phone number "
-            "starting with 09"
+            "Must be a valid 11-digit Iranian phone number " "starting with 09"
         ),
     )
 
     # 🔴 Corrected: Use of 'examples' (plural) and lists.
     model_config = ConfigDict(
-        json_schema_extra={
-            "examples": [
-                {"phone_number": "09123456789"}
-            ]
-        }
+        json_schema_extra={"examples": [{"phone_number": "09123456789"}]}
     )
 
 
 class UserSignup(BaseModel):
-    phone_number: str = Field(
-        ..., pattern=r"^09[0-9]{9}$"
-    )
+    phone_number: str = Field(..., pattern=r"^09[0-9]{9}$")
     email: EmailStr = Field(...)
     password: str = Field(..., min_length=8)
     otp_code: str = Field(..., min_length=6, max_length=6)
@@ -49,11 +42,6 @@ class UserSignup(BaseModel):
             ]
         }
     )
-
-
-class UserLogin(BaseModel):
-    phone_number: str = Field(..., pattern=r"^09[0-9]{9}$")
-    password: str
 
 
 # --- Output Models (Response) ---
