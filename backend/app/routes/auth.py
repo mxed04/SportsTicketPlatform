@@ -19,9 +19,6 @@ from app.security import (
 )
 from app.routes.reservations import get_current_user_id
 
-# if we want to send real OTP emails, we can import the email sender function
-# from app.email_sender import send_real_otp_email
-
 # Set up logging
 logger = logging.getLogger(__name__)
 
@@ -38,17 +35,15 @@ def request_otp(data: OTPRequest):
     otp_code = generate_and_set_otp(data.phone_number)
 
     logger.info(
-        "📩 MOCK SMS/EMAIL DELIVERY: "
-        f"OTP code for {data.phone_number} is {otp_code}"
+        (
+            f"📩 MOCK SMS/EMAIL DELIVERY: OTP code for {data.phone_number} "
+            f"is {otp_code}"
+        )
     )
-
-    # if we want to send real OTP emails in the future:
-    # send_real_otp_email(receiver_email=..., otp_code=otp_code)
 
     return {
         "message": "OTP sent successfully",
         "expires_in": "120 seconds",
-        # "otp": otp_code  # omit OTP from response in production for security
     }
 
 
@@ -77,17 +72,18 @@ def signup(data: UserSignup):
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=(
-                        "User with this phone number or email already exists"
+                        "User with this phone number or email "
+                        "already exists"
                     ),
                 )
 
             password_hash = get_password_hash(data.password)
             cursor.execute(
                 (
-                    "INSERT INTO users (phone_number, email, password_hash, "
-                    "first_name, last_name, city, role) "
-                    "VALUES (%s, %s, %s, %s, %s, %s, 'audience') "
-                    "RETURNING user_id, role;"
+                    "INSERT INTO users (phone_number, email, "
+                    "password_hash, first_name, last_name, city, "
+                    "role) VALUES (%s, %s, %s, %s, %s, %s, "
+                    "'audience') RETURNING user_id, role;"
                 ),
                 (
                     data.phone_number,
@@ -115,7 +111,6 @@ def signup(data: UserSignup):
     except Exception as e:
         if isinstance(e, HTTPException):
             raise e
-        # Keep line length within limits
         err_msg = "Database error: " + str(e)
         raise HTTPException(status_code=500, detail=err_msg)
 
@@ -127,14 +122,16 @@ def signup(data: UserSignup):
 )
 def login(form_data: OAuth2PasswordRequestForm = Depends()):
     with get_db_cursor() as cursor:
+        # 🔴 Modified: Fetching is_active from the database
         cursor.execute(
             (
-                "SELECT user_id, password_hash, role FROM users "
+                "SELECT user_id, password_hash, role, is_active FROM users "
                 "WHERE phone_number = %s;"
             ),
             (form_data.username,),
         )
         user = cursor.fetchone()
+
         if not user or not verify_password(
             form_data.password,
             user["password_hash"],
@@ -143,6 +140,16 @@ def login(form_data: OAuth2PasswordRequestForm = Depends()):
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid phone number or password",
                 headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        # 🔴 Modified: Checking if account is suspended before token
+        if not user["is_active"]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "Your account has been deactivated. "
+                    "Please contact support."
+                ),
             )
 
         token_data = {
