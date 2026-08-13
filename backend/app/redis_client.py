@@ -69,3 +69,29 @@ def invalidate_user_profile_cache(user_id: int):
     """Clearing the user profile cache when editing information"""
     redis_key = f"user:profile:{user_id}"
     redis_client.delete(redis_key)
+
+
+# ---------------------------------------------------------
+# Waiting List (Queue) Functions for Sold-out Tickets
+# ---------------------------------------------------------
+def add_to_waitlist(ticket_id: int, user_id: int) -> int:
+    """Add a user to the waitlist and return their queue position."""
+    queue_key = f"waitlist:{ticket_id}"
+
+    # Check if user is already in the waitlist to prevent duplicates
+    existing_users = redis_client.lrange(queue_key, 0, -1)
+    if (str(user_id).encode("utf-8") in existing_users
+            or str(user_id) in existing_users):
+        return -1  # User is already in the queue
+
+    # Add user to the end of the queue (Right Push)
+    redis_client.rpush(queue_key, user_id)
+    # Return the length of the queue (which is their position)
+    return redis_client.llen(queue_key)
+
+
+def pop_from_waitlist(ticket_id: int):
+    """Removes and returns the first user in the waitlist (Left Pop)."""
+    queue_key = f"waitlist:{ticket_id}"
+    user_id = redis_client.lpop(queue_key)
+    return int(user_id) if user_id else None

@@ -1,7 +1,7 @@
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Path, status
 from app.database import get_db_cursor
-from app.redis_client import clear_ticket_cache
+from app.redis_client import clear_ticket_cache, pop_from_waitlist
 from app.routes.reservations import get_current_user_id
 from app.schemas.payments import PaymentRequest, PaymentResponse
 from app.schemas.tickets import (
@@ -38,7 +38,6 @@ def process_payment(
                         "cannot make payments."
                     ),
                 )
-
             cursor.execute(
                 (
                     "SELECT r.reservation_id, r.status, r.expires_at, "
@@ -57,19 +56,16 @@ def process_payment(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="Reservation not found or does not belong to you",
                 )
-
             if reservation["status"] == "paid":
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Reservation is already paid",
                 )
-
             if reservation["status"] == "cancelled":
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Reservation has been cancelled",
                 )
-
             if reservation["is_expired"]:
                 cursor.execute(
                     (
@@ -87,11 +83,27 @@ def process_payment(
                 )
                 cursor.connection.commit()
                 clear_ticket_cache()
+
+                # 🔴 Waitlist Check on Expiration
+                next_user_id = pop_from_waitlist(reservation["ticket_id"])
+                if next_user_id:
+                    cursor.execute(
+                        "SELECT phone_number FROM users WHERE user_id = %s;",
+                        (next_user_id,),
+                    )
+                    lucky_user = cursor.fetchone()
+                    if lucky_user:
+                        message = (
+                            f"🔔 MOCK SMS: Hey {lucky_user['phone_number']}, "
+                            f"ticket_id {reservation['ticket_id']} just "
+                            f"opened up! Hurry!"
+                        )
+                        print(message)
+
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Reservation expired. Ticket returned to the pool.",
                 )
-
             cursor.execute(
                 (
                     "INSERT INTO payments (reservation_id, user_id, "
@@ -107,7 +119,6 @@ def process_payment(
                 ),
             )
             payment = cursor.fetchone()
-
             cursor.execute(
                 (
                     "UPDATE reservations SET status = 'paid' "
@@ -116,7 +127,6 @@ def process_payment(
                 (data.reservation_id,),
             )
             cursor.connection.commit()
-
             return {
                 "payment_id": payment["payment_id"],
                 "reservation_id": data.reservation_id,
@@ -165,7 +175,6 @@ def calculate_cancellation_penalty(
                         "cannot cancel tickets."
                     ),
                 )
-
             cursor.execute(
                 (
                     "SELECT r.status, t.match_date, t.price "
@@ -182,33 +191,27 @@ def calculate_cancellation_penalty(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="Reservation not found",
                 )
-
             if data["status"] != "paid":
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Only 'paid' reservations can be cancelled",
                 )
-
             now = datetime.now()
             if data["match_date"] <= now:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Match has already started. Cannot cancel.",
                 )
-
             time_difference = data["match_date"] - now
             hours_until_match = time_difference.total_seconds() / 3600
-
             if hours_until_match < 24:
                 penalty_percentage = 50
             elif hours_until_match <= 72:
                 penalty_percentage = 20
             else:
                 penalty_percentage = 0
-
             price = float(data["price"])
             penalty_amount = price * (penalty_percentage / 100)
-
             return {
                 "reservation_id": reservation_id,
                 "match_date": data["match_date"].isoformat(),
@@ -251,19 +254,16 @@ def cancel_ticket(
                 (request.reservation_id,),
             )
             reservation = cursor.fetchone()
-
             if not reservation:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="Reservation not found.",
                 )
-
             if reservation["status"] != "paid":
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Reservation is not in 'paid' status.",
                 )
-
             cursor.execute(
                 (
                     "UPDATE reservations SET status = 'cancelled' "
@@ -271,7 +271,6 @@ def cancel_ticket(
                 ),
                 (request.reservation_id,),
             )
-
             cursor.execute(
                 (
                     "UPDATE tickets SET remaining_capacity = "
@@ -280,9 +279,24 @@ def cancel_ticket(
                 ),
                 (reservation["ticket_id"],),
             )
-
             cursor.connection.commit()
             clear_ticket_cache()
+
+            # 🔴 Waitlist Check: Notify the next person in line!
+            next_user_id = pop_from_waitlist(reservation["ticket_id"])
+            if next_user_id:
+                cursor.execute(
+                    "SELECT phone_number FROM users WHERE user_id = %s;",
+                    (next_user_id,),
+                )
+                lucky_user = cursor.fetchone()
+                if lucky_user:
+                    message = (
+                        f"🔔 MOCK SMS: Hey {lucky_user['phone_number']}, "
+                        f"ticket_id {reservation['ticket_id']} just "
+                        f"opened up! Hurry and reserve it!"
+                    )
+                    print(message)
 
             return {
                 "message": "Ticket successfully cancelled.",
