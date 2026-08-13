@@ -24,12 +24,29 @@ def process_payment(
 ):
     try:
         with get_db_cursor() as cursor:
+            # 🔴 Add a concurrency lock.
+            # Re-check the user's status while locked.
+            cursor.execute(
+                "SELECT is_active FROM users " "WHERE user_id = %s;",
+                (user_id,),
+            )
+            user = cursor.fetchone()
+            if not user or not user["is_active"]:
+                raise HTTPException(
+                    status_code=403,
+                    detail=(
+                        "Your account has been deactivated. You "
+                        "cannot make payments."
+                    ),
+                )
+
             cursor.execute(
                 (
-                    "SELECT r.reservation_id, r.status, r.expires_at, "
+                    "SELECT r.reservation_id, r.status, "
+                    "r.expires_at, "
                     "(r.expires_at < NOW()) AS is_expired, t.price, "
-                    "t.ticket_id FROM reservations r JOIN tickets t "
-                    "ON r.ticket_id = t.ticket_id "
+                    "t.ticket_id FROM reservations r "
+                    "JOIN tickets t ON r.ticket_id = t.ticket_id "
                     "WHERE r.reservation_id = %s "
                     "AND r.user_id = %s "
                     "FOR UPDATE OF r;"
@@ -39,8 +56,11 @@ def process_payment(
             reservation = cursor.fetchone()
             if not reservation:
                 raise HTTPException(
-                    status_code=404,
-                    detail="Reservation not found or does not belong to you",
+                    status_code=403,
+                    detail=(
+                        "Your account has been deactivated. You cannot "
+                        "cancel tickets."
+                    ),
                 )
             if reservation["status"] == "paid":
                 raise HTTPException(
@@ -72,14 +92,18 @@ def process_payment(
                 clear_ticket_cache()
                 raise HTTPException(
                     status_code=400,
-                    detail="Reservation expired. Ticket returned to the pool.",
+                    detail=(
+                        "Reservation expired. Ticket returned to "
+                        "the pool."
+                    ),
                 )
 
             cursor.execute(
                 (
-                    "INSERT INTO payments (reservation_id, user_id, amount, "
-                    "payment_method, status, paid_at) VALUES (%s, %s, %s, "
-                    "%s, 'successful', NOW()) "
+                    "INSERT INTO payments "
+                    "(reservation_id, user_id, amount, payment_method, "
+                    "status, paid_at) "
+                    "VALUES (%s, %s, %s, %s, 'successful', NOW()) "
                     "RETURNING payment_id, paid_at;"
                 ),
                 (
@@ -130,10 +154,30 @@ def calculate_cancellation_penalty(
 ):
     try:
         with get_db_cursor() as cursor:
+            # 🔴 Add a concurrency lock (FOR UPDATE).
+            # Re-check the user's status while locked.
             cursor.execute(
                 (
-                    "SELECT r.status, t.match_date, t.price FROM reservations "
-                    "r JOIN tickets t ON r.ticket_id = t.ticket_id "
+                    "SELECT is_active FROM users "
+                    "WHERE user_id = %s FOR UPDATE;"
+                ),
+                (user_id,),
+            )
+            user = cursor.fetchone()
+            if not user or not user["is_active"]:
+                raise HTTPException(
+                    status_code=403,
+                    detail=(
+                        "Your account has been deactivated. You "
+                        "cannot cancel tickets."
+                    ),
+                )
+
+            cursor.execute(
+                (
+                    "SELECT r.status, t.match_date, t.price "
+                    "FROM reservations r "
+                    "JOIN tickets t ON r.ticket_id = t.ticket_id "
                     "WHERE r.reservation_id = %s "
                     "AND r.user_id = %s;"
                 ),
@@ -200,19 +244,40 @@ def cancel_ticket(
     )
     try:
         with get_db_cursor() as cursor:
+            # 🔴 Add a concurrency lock (FOR UPDATE).
+            # Re-check the reservation status while locked.
+            cursor.execute(
+                "SELECT status, ticket_id FROM reservations "
+                "WHERE reservation_id = %s FOR UPDATE;",
+                (request.reservation_id,),
+            )
+            reservation = cursor.fetchone()
+
+            if not reservation:
+                raise HTTPException(
+                    status_code=404,
+                    detail="Reservation not found.",
+                )
+            if reservation["status"] != "paid":
+                raise HTTPException(
+                    status_code=400,
+                    detail="Reservation is not in 'paid' status.",
+                )
+
             cursor.execute(
                 (
                     "UPDATE reservations SET status = 'cancelled' "
-                    "WHERE reservation_id = %s RETURNING ticket_id;"
+                    "WHERE reservation_id = %s;"
                 ),
                 (request.reservation_id,),
             )
             cursor.execute(
                 (
                     "UPDATE tickets SET remaining_capacity = "
-                    "remaining_capacity + 1 WHERE ticket_id = %s;"
+                    "remaining_capacity + 1 "
+                    "WHERE ticket_id = %s;"
                 ),
-                (cursor.fetchone()["ticket_id"],),
+                (reservation["ticket_id"],),
             )
             cursor.connection.commit()
             clear_ticket_cache()
@@ -223,5 +288,8 @@ def cancel_ticket(
                 "penalty_applied": penalty_data["penalty_amount"],
             }
     except Exception as e:
+        # 🔴Adding proper handling for HTTPException errors.
+        if isinstance(e, HTTPException):
+            raise e
         detail = "Database error: %s" % str(e)
         raise HTTPException(status_code=500, detail=detail)
