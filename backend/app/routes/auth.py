@@ -18,6 +18,7 @@ from app.security import (
     verify_password,
 )
 from app.routes.reservations import get_current_user_id
+from app.schemas.auth import PasswordResetRequest
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -161,6 +162,57 @@ def login(form_data: OAuth2PasswordRequestForm = Depends()):
             "token_type": "bearer",
             "message": "Login successful",
         }
+
+
+@router.post(
+    "/reset-password",
+    response_model=dict,
+    status_code=status.HTTP_200_OK,
+    summary="Reset forgotten password using OTP",
+)
+def reset_password(data: PasswordResetRequest):
+    # 1. Checking the validity of the verification code from Redis
+    if not verify_otp(data.phone_number, data.otp_code):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired OTP code",
+        )
+
+    try:
+        with get_db_cursor() as cursor:
+            # 2. Checking whether a user with this number exists.
+            cursor.execute(
+                "SELECT user_id FROM users WHERE phone_number = %s;",
+                (data.phone_number,),
+            )
+            if not cursor.fetchone():
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="User with this phone number does not exist",
+                )
+
+            # 3. Hashing the new password and updating the database
+            new_password_hash = get_password_hash(data.new_password)
+            cursor.execute(
+                (
+                    "UPDATE users SET password_hash = %s "
+                    "WHERE phone_number = %s;"
+                ),
+                (new_password_hash, data.phone_number),
+            )
+            cursor.connection.commit()
+
+            return {
+                 "message": (
+                    "Password has been reset successfully. "
+                    "You can now login."
+                 )
+            }
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        err_msg = f"Database error: {str(e)}"
+        raise HTTPException(status_code=500, detail=err_msg)
 
 
 @router.get(

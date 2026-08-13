@@ -54,3 +54,9 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str
     message: str | None = None
+
+
+class PasswordResetRequest(BaseModel):
+    phone_number: str = Field(..., description="User's phone number")
+    otp_code: str = Field(..., description="OTP received via SMS")
+    new_password: str = Field(..., min_length=6, description="New password")
