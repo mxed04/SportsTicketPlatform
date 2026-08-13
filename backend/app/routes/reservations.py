@@ -33,10 +33,10 @@ def get_current_user_id(token: str = Depends(oauth2_scheme)) -> int:
                 detail="Invalid token",
             )
         return int(user_id)
-    except JWTError:
+    except (JWTError, ValueError):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token",
+            detail="Invalid or expired token format",
         )
 
 
@@ -52,8 +52,20 @@ def reserve_ticket(
 ):
     try:
         with get_db_cursor() as cursor:
+            # 1. Checking user account activation
+            cursor.execute(
+                "SELECT is_active FROM users WHERE user_id = %s;", (user_id,)
+            )
+            user = cursor.fetchone()
+            if not user or not user["is_active"]:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Your account has been deactivated.",
+                )
+
+            # 2. Adding is_active to ticket data retrieval
             select_ticket_query = (
-                "SELECT remaining_capacity FROM tickets "
+                "SELECT remaining_capacity, is_active FROM tickets "
                 "WHERE ticket_id = %s "
                 "FOR UPDATE;"
             )
@@ -63,10 +75,19 @@ def reserve_ticket(
             if not ticket:
                 raise HTTPException(status_code=404, detail="Ticket not found")
 
-            if ticket["remaining_capacity"] < 1:
+            # 3. Checking ticket validity
+            if not ticket["is_active"]:
                 raise HTTPException(
                     status_code=400,
-                    detail="Ticket is sold out",
+                    detail=(
+                        "This ticket is currently inactive and "
+                        "cannot be reserved."
+                    ),
+                )
+
+            if ticket["remaining_capacity"] < 1:
+                raise HTTPException(
+                    status_code=400, detail="Ticket is sold out"
                 )
 
             reservation_check_query = (
@@ -79,8 +100,8 @@ def reserve_ticket(
                 raise HTTPException(
                     status_code=400,
                     detail=(
-                        "You already have an active reservation "
-                        "for this ticket"
+                        "You already have an active reservation for "
+                        "this ticket"
                     ),
                 )
 
