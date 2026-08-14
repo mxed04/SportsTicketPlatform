@@ -11,14 +11,14 @@ router = APIRouter(prefix="/api/tickets", tags=["Tickets"])
     "/search",
     response_model=TicketListResponse,
     status_code=status.HTTP_200_OK,
-    summary="Advanced Ticket Search with Smart Redis Caching & Fuzzy Search",
+    summary="Advanced Ticket Search with Caching & Fuzzy",
 )
 def search_tickets(
     sport_type: str | None = Query(
         None,
         description="Sport type: football, volleyball, basketball",
     ),
-    venue: str | None = Query(None, description="Name of the venue/stadium"),
+    venue: str | None = Query(None, description="Venue/stadium name"),
     min_price: float | None = Query(
         None,
         ge=0,
@@ -30,13 +30,13 @@ def search_tickets(
         description="Maximum ticket price",
     ),
     team_name: str | None = Query(
-        None, description="Search by team name (home or away)"
+        None, description="Team name (home or away)"
     ),
     ticket_tier: str | None = Query(
         None, description="Ticket tier: VIP, Normal, Premium"
     ),
     start_date: str | None = Query(
-        None, description="Matches starting from date (YYYY-MM-DD)"
+        None, description="Start date (YYYY-MM-DD)"
     ),
 ):
     cache_key = (
@@ -101,8 +101,25 @@ def search_tickets(
             def format_ticket(row):
                 item = dict(row)
                 item["match_date"] = item["match_date"].isoformat()
-                item["price"] = float(item["price"])
                 item["title"] = f"{item['home_team']} vs {item['away_team']}"
+
+                # 🔴 Dynamic Surge Pricing Logic
+                base_price = float(item["price"])
+                remaining = int(item["remaining_capacity"])
+
+                # Hardcoded assumed total capacity (e.g., 5000)
+                # In a real app, from stadium/venue table.
+                total_capacity = 5000
+
+                # If capacity low (< 20%), increase price 15%
+                if remaining > 0 and remaining < (total_capacity * 0.20):
+                    surge_price = base_price * 1.15
+                    item["price"] = round(surge_price, 2)
+                    item["is_surge_pricing"] = True
+                else:
+                    item["price"] = base_price
+                    item["is_surge_pricing"] = False
+
                 return item
 
             tickets_list = [format_ticket(row) for row in cursor.fetchall()]
@@ -110,25 +127,20 @@ def search_tickets(
 
             # ==========================================
             # STAGE 2: Fuzzy Search Fallback
-            # Triggered only if standard search yields 0 results
-            # and the user searched for text fields (team or venue)
             # ==========================================
             if not tickets_list and (team_name or venue):
                 fuzzy_query = base_select
                 fuzzy_params = []
 
-                # We use pg_trgm '<->' operator (distance). Lower is better.
-                # We order by the closest match and limit to top 3 suggestions.
                 if team_name:
-                    # Match against either home or away team
                     fuzzy_query += (
                         " AND (home_team <-> %s < 0.6 OR "
-                        "away_team <-> %s < 0.6)"
+                        " away_team <-> %s < 0.6)"
                     )
                     fuzzy_params.extend([team_name, team_name])
                     fuzzy_query += (
                         " ORDER BY LEAST(home_team <-> %s, "
-                        "away_team <-> %s) ASC"
+                        " away_team <-> %s) ASC"
                     )
                     fuzzy_params.extend([team_name, team_name])
                 elif venue:
@@ -138,7 +150,6 @@ def search_tickets(
                     fuzzy_params.append(venue)
 
                 fuzzy_query += " LIMIT 3;"
-
                 cursor.execute(fuzzy_query, tuple(fuzzy_params))
                 suggestions_list = [
                     format_ticket(row) for row in cursor.fetchall()
@@ -166,10 +177,12 @@ def search_tickets(
     "/{ticket_id}",
     response_model=TicketDetailResponse,
     status_code=status.HTTP_200_OK,
-    summary="Get ticket details with JOINs and COALESCE",
+    summary="Get ticket details with JOINs & COALESCE",
 )
 def get_ticket_details(
-    ticket_id: int = Path(..., gt=0, description="The ID of the ticket")
+    ticket_id: int = Path(
+        ..., gt=0, description="The ID of the ticket"
+    )
 ):
     try:
         with get_db_cursor() as cursor:
@@ -218,13 +231,29 @@ def get_ticket_details(
             """
             cursor.execute(query, (ticket_id,))
             row = cursor.fetchone()
+
             if not row:
                 raise HTTPException(status_code=404, detail="Ticket not found")
+
             item = dict(row)
             item["match_date"] = item["match_date"].isoformat()
-            item["price"] = float(item["price"])
             item["title"] = f"{item['home_team']} vs {item['away_team']}"
+
+            # 🔴 Dynamic Surge Pricing Logic for Detail View
+            base_price = float(item["price"])
+            remaining = int(item["remaining_capacity"])
+            total_capacity = 5000
+
+            if remaining > 0 and remaining < (total_capacity * 0.20):
+                surge_price = base_price * 1.15
+                item["price"] = round(surge_price, 2)
+                item["is_surge_pricing"] = True
+            else:
+                item["price"] = base_price
+                item["is_surge_pricing"] = False
+
             return item
+
     except Exception as e:
         if isinstance(e, HTTPException):
             raise e

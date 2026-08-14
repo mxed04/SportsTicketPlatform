@@ -16,13 +16,15 @@ class TicketResponse(BaseModel):
     price: float
     remaining_capacity: int
     is_active: bool
+    # 🔴 Added: Indicates if Dynamic/Surge Pricing is active for this ticket
+    is_surge_pricing: bool = False
 
 
 class TicketListResponse(BaseModel):
     source: str
     count: int
     tickets: list[TicketResponse]
-    # 🔴 Added: A list to hold fuzzy search suggestions when exact matches fail
+    # A list to hold fuzzy search suggestions when exact matches fail
     suggestions: list[TicketResponse] | None = None
 
 
