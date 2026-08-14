@@ -19,3 +19,8 @@ class PaymentResponse(BaseModel):
     status: str
     message: str
     paid_at: datetime
+    # 🔴 Added: Field to hold the Base64 QR code image
+    qr_code: str | None = Field(
+        None,
+        description="Base64 encoded QR Code string for the digital ticket",
+    )

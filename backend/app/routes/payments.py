@@ -8,6 +8,10 @@ from app.schemas.tickets import (
     CancelTicketRequest,
     CancellationPenaltyResponse,
 )
+import base64
+import io
+import json
+import qrcode
 
 router = APIRouter(prefix="/api/payments", tags=["Payments"])
 
@@ -16,7 +20,7 @@ router = APIRouter(prefix="/api/payments", tags=["Payments"])
     "/",
     response_model=PaymentResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Process payment for a pending reservation",
+    summary="Process payment for a pending reservation and issue QR Ticket",
 )
 def process_payment(
     data: PaymentRequest,
@@ -84,7 +88,7 @@ def process_payment(
                 cursor.connection.commit()
                 clear_ticket_cache()
 
-                # 🔴 Waitlist Check on Expiration
+                # Waitlist Check on Expiration
                 next_user_id = pop_from_waitlist(reservation["ticket_id"])
                 if next_user_id:
                     cursor.execute(
@@ -93,12 +97,11 @@ def process_payment(
                     )
                     lucky_user = cursor.fetchone()
                     if lucky_user:
-                        message = (
+                        print(
                             f"🔔 MOCK SMS: Hey {lucky_user['phone_number']}, "
                             f"ticket_id {reservation['ticket_id']} just "
                             f"opened up! Hurry!"
                         )
-                        print(message)
 
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
@@ -127,6 +130,32 @@ def process_payment(
                 (data.reservation_id,),
             )
             cursor.connection.commit()
+
+            # 🔴 NEW: Generate Digital Ticket (QR Code)
+            ticket_data = {
+                "reservation_id": data.reservation_id,
+                "ticket_id": reservation["ticket_id"],
+                "payment_id": payment["payment_id"],
+                "amount": float(reservation["price"]),
+                "paid_at": payment["paid_at"].isoformat(),
+            }
+
+            qr = qrcode.QRCode(
+                version=1,
+                error_correction=qrcode.constants.ERROR_CORRECT_L,
+                box_size=10,
+                border=4,
+            )
+            qr.add_data(json.dumps(ticket_data))
+            qr.make(fit=True)
+            img = qr.make_image(fill_color="black", back_color="white")
+
+            # Convert image to Base64 string
+            buffered = io.BytesIO()
+            img.save(buffered, format="PNG")
+            qr_base64 = base64.b64encode(buffered.getvalue()).decode("utf-8")
+            qr_code_data_uri = f"data:image/png;base64,{qr_base64}"
+
             return {
                 "payment_id": payment["payment_id"],
                 "reservation_id": data.reservation_id,
@@ -134,6 +163,7 @@ def process_payment(
                 "status": "successful",
                 "message": "Payment completed successfully. Ticket issued.",
                 "paid_at": payment["paid_at"],
+                "qr_code": qr_code_data_uri,
             }
     except Exception as e:
         if isinstance(e, HTTPException):
@@ -282,7 +312,7 @@ def cancel_ticket(
             cursor.connection.commit()
             clear_ticket_cache()
 
-            # 🔴 Waitlist Check: Notify the next person in line!
+            # Waitlist Check: Notify the next person in line!
             next_user_id = pop_from_waitlist(reservation["ticket_id"])
             if next_user_id:
                 cursor.execute(
@@ -293,8 +323,8 @@ def cancel_ticket(
                 if lucky_user:
                     message = (
                         f"🔔 MOCK SMS: Hey {lucky_user['phone_number']}, "
-                        f"ticket_id {reservation['ticket_id']} just "
-                        f"opened up! Hurry and reserve it!"
+                        f"ticket_id {reservation['ticket_id']} just opened up!"
+                        "Hurry and reserve it!"
                     )
                     print(message)
 
