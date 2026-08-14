@@ -41,7 +41,7 @@ class TicketResponse(BaseModel):
                     "price": 50000.0,
                     "remaining_capacity": 4500,
                     "is_active": True,
-                    "is_surge_pricing": False,  # general mode
+                    "is_surge_pricing": False,
                 },
                 {
                     "ticket_id": 2,
@@ -57,7 +57,7 @@ class TicketResponse(BaseModel):
                     "price": 57500.0,
                     "remaining_capacity": 15,
                     "is_active": True,
-                    "is_surge_pricing": True,  # Dynamic pricing mode
+                    "is_surge_pricing": True,
                 },
             ]
         }
@@ -68,8 +68,55 @@ class TicketListResponse(BaseModel):
     source: str
     count: int
     tickets: list[TicketResponse]
-    # A list to hold fuzzy search suggestions when exact matches fail
     suggestions: list[TicketResponse] | None = None
+
+    # This is a consolidated response model for ticket listings,
+    # including both the main tickets and any suggested tickets.
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "source": "database (PostgreSQL) 🐘",
+                    "count": 2,
+                    "tickets": [
+                        {
+                            "ticket_id": 1,
+                            "title": "Esteghlal vs Persepolis",
+                            "sport_type": "football",
+                            "home_team": "Esteghlal",
+                            "away_team": "Persepolis",
+                            "venue_name": "Azadi Stadium",
+                            "city": "Tehran",
+                            "ticket_tier": "VIP",
+                            "organizer": "سازمان لیگ",
+                            "match_date": "2026-08-03T07:46:08.748Z",
+                            "price": 50000.0,
+                            "remaining_capacity": 4500,
+                            "is_active": True,
+                            "is_surge_pricing": False,  # general mode
+                        },
+                        {
+                            "ticket_id": 2,
+                            "title": "Tractor vs Sepahan",
+                            "sport_type": "football",
+                            "home_team": "Tractor",
+                            "away_team": "Sepahan",
+                            "venue_name": "Yadegar-e Emam",
+                            "city": "Tabriz",
+                            "ticket_tier": "Regular",
+                            "organizer": "سازمان لیگ",
+                            "match_date": "2026-09-10T18:00:00.000Z",
+                            "price": 57500.0,
+                            "remaining_capacity": 15,
+                            "is_active": True,
+                            "is_surge_pricing": True,  # dynamic pricing mode
+                        },
+                    ],
+                    "suggestions": [],
+                }
+            ]
+        }
+    )
 
 
 class TicketDetailResponse(TicketResponse):
