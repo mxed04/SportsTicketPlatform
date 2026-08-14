@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from datetime import datetime
 
 
@@ -16,8 +16,52 @@ class TicketResponse(BaseModel):
     price: float
     remaining_capacity: int
     is_active: bool
-    # 🔴 Added: Indicates if Dynamic/Surge Pricing is active for this ticket
-    is_surge_pricing: bool = False
+    is_surge_pricing: bool = Field(
+        default=False,
+        description=(
+            "Indicates if dynamic surge pricing is currently active "
+            "due to high demand"
+        ),
+    )
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "ticket_id": 1,
+                    "title": "Esteghlal vs Persepolis",
+                    "sport_type": "football",
+                    "home_team": "Esteghlal",
+                    "away_team": "Persepolis",
+                    "venue_name": "Azadi Stadium",
+                    "city": "Tehran",
+                    "ticket_tier": "VIP",
+                    "organizer": "سازمان لیگ",
+                    "match_date": "2026-08-03T07:46:08.748Z",
+                    "price": 50000.0,
+                    "remaining_capacity": 4500,
+                    "is_active": True,
+                    "is_surge_pricing": False,  # general mode
+                },
+                {
+                    "ticket_id": 2,
+                    "title": "Tractor vs Sepahan",
+                    "sport_type": "football",
+                    "home_team": "Tractor",
+                    "away_team": "Sepahan",
+                    "venue_name": "Yadegar-e Emam",
+                    "city": "Tabriz",
+                    "ticket_tier": "Regular",
+                    "organizer": "سازمان لیگ",
+                    "match_date": "2026-09-10T18:00:00.000Z",
+                    "price": 57500.0,
+                    "remaining_capacity": 15,
+                    "is_active": True,
+                    "is_surge_pricing": True,  # Dynamic pricing mode
+                },
+            ]
+        }
+    )
 
 
 class TicketListResponse(BaseModel):
