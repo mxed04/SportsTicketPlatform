@@ -13,12 +13,18 @@ from app.routes import (
     admin,
     locations,
 )
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from app.rate_limiter import limiter
 
 app = FastAPI(
     title=settings.APP_NAME,
     version="3.0.0",
     description="SportsTicketPlatform API - Phase 3 (Raw SQL & Redis Cache)",
 )
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # 🔴 Fixing CORS settings for frontend communication
 origins = [
