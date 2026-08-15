@@ -61,15 +61,25 @@ export default function Dashboard() {
             <span className="text-2xl">🎟️</span>
             <h1 className="text-xl font-bold text-gray-900">سامانه رزرو بلیت ورزشی</h1>
           </div>
-          <button 
-            onClick={() => {
-              localStorage.removeItem('token');
-              window.location.href = '/';
-            }}
-            className="text-sm font-medium text-red-600 hover:text-red-800 transition-colors"
-          >
-            خروج از حساب
-          </button>
+          
+          {/* Action Buttons (Profile & Logout) */}
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => window.location.href = '/profile'}
+              className="text-sm font-medium text-blue-600 hover:text-blue-800 transition-colors bg-blue-50 px-3 py-1.5 rounded-lg"
+            >
+              پروفایل من
+            </button>
+            <button 
+              onClick={() => {
+                localStorage.removeItem('token');
+                window.location.href = '/';
+              }}
+              className="text-sm font-medium text-red-600 hover:text-red-800 transition-colors"
+            >
+              خروج
+            </button>
+          </div>
         </div>
       </header>
 
@@ -117,7 +127,7 @@ export default function Dashboard() {
                 <div className="p-5 space-y-3 text-sm text-gray-600">
                   <div className="flex justify-between">
                     <span>ورزشگاه:</span>
-                    {/* Updated to check venue_name first for DB/ElasticSearch compatibility */}
+                    {/* Check venue_name first for DB/ElasticSearch compatibility */}
                     <span className="font-bold text-gray-800">
                       {t.venue_name || t.venue || t.location_name || 'نامشخص'}
                     </span>
