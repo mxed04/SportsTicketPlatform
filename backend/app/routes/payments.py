@@ -19,11 +19,11 @@ from app.schemas.tickets import (
     CancelTicketRequest,
     CancellationPenaltyResponse,
 )
-
 import qrcode
 import io
 import base64
 import json
+from app.es_client import update_ticket_capacity_in_es
 
 router = APIRouter(prefix="/api/payments", tags=["Payments"])
 
@@ -80,6 +80,7 @@ def process_payment(
                         "cannot make payments."
                     ),
                 )
+
             cursor.execute(
                 (
                     "SELECT r.reservation_id, r.status, "
@@ -96,6 +97,7 @@ def process_payment(
                 (data.reservation_id, user_id),
             )
             reservation = cursor.fetchone()
+
             if not reservation:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
@@ -104,16 +106,19 @@ def process_payment(
                         "belong to you"
                     ),
                 )
+
             if reservation["status"] == "paid":
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Reservation is already paid",
                 )
+
             if reservation["status"] == "cancelled":
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Reservation has been cancelled",
                 )
+
             if reservation["is_expired"]:
                 cursor.execute(
                     (
@@ -122,6 +127,16 @@ def process_payment(
                     ),
                     (data.reservation_id,),
                 )
+
+                # Fetch current capacity before updating
+                cursor.execute(
+                    "SELECT remaining_capacity FROM tickets "
+                    "WHERE ticket_id = %s FOR UPDATE;",
+                    (reservation["ticket_id"],),
+                )
+                ticket_data = cursor.fetchone()
+                current_capacity = ticket_data["remaining_capacity"]
+
                 cursor.execute(
                     (
                         "UPDATE tickets "
@@ -134,8 +149,16 @@ def process_payment(
                 cursor.connection.commit()
                 clear_ticket_cache()
 
+                # 🔴 Sync restored capacity to ElasticSearch
+                update_ticket_capacity_in_es(
+                    reservation["ticket_id"],
+                    current_capacity + 1,
+                )
+
                 # Waitlist Check on Expiration
-                next_user_id = pop_from_waitlist(reservation["ticket_id"])
+                next_user_id = pop_from_waitlist(
+                    reservation["ticket_id"]
+                )
                 if next_user_id:
                     cursor.execute(
                         (
@@ -178,6 +201,7 @@ def process_payment(
                 ),
             )
             payment = cursor.fetchone()
+
             cursor.execute(
                 (
                     "UPDATE reservations SET status = 'paid' "
@@ -204,11 +228,15 @@ def process_payment(
             )
             qr.add_data(json.dumps(ticket_data))
             qr.make(fit=True)
-            img = qr.make_image(fill_color="black", back_color="white")
 
+            img = qr.make_image(
+                fill_color="black", back_color="white"
+            )
             buffered = io.BytesIO()
             img.save(buffered, format="PNG")
-            qr_base64 = base64.b64encode(buffered.getvalue()).decode("utf-8")
+            qr_base64 = base64.b64encode(
+                buffered.getvalue()
+            ).decode("utf-8")
             qr_code_data_uri = f"data:image/png;base64,{qr_base64}"
 
             # Prepare final response
@@ -217,22 +245,19 @@ def process_payment(
                 "reservation_id": data.reservation_id,
                 "amount": float(reservation["price"]),
                 "status": "successful",
-                "message": "Payment completed successfully. Ticket issued.",
-                "paid_at": payment[
-                    "paid_at"
-                ].isoformat(),  # Convert datetime for JSON serialization
+                "message": (
+                    "Payment completed successfully. Ticket issued."
+                ),
+                "paid_at": payment["paid_at"].isoformat(),
                 "qr_code": qr_code_data_uri,
             }
 
-            # 🔴 NEW: Cache successful response in Redis
-            # for 24 hours. If user sends same Idempotency-Key
-            # within 24h, we return this dict.
+            # 🔴 NEW: Cache successful response in Redis for 24 hours
             redis_client.set(
                 idempotency_cache_key,
                 json.dumps(response_dict),
                 ex=86400,
             )
-
             return response_dict
 
     except Exception as e:
@@ -275,6 +300,7 @@ def calculate_cancellation_penalty(
                         "cannot cancel tickets."
                     ),
                 )
+
             cursor.execute(
                 (
                     "SELECT r.status, t.match_date, t.price "
@@ -287,34 +313,41 @@ def calculate_cancellation_penalty(
                 (reservation_id, user_id),
             )
             data = cursor.fetchone()
+
             if not data:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="Reservation not found",
                 )
+
             if data["status"] != "paid":
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Only 'paid' reservations can be cancelled",
                 )
+
             now = datetime.now()
             if data["match_date"] <= now:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Match has already started. Cannot cancel.",
                 )
+
             time_difference = data["match_date"] - now
             hours_until_match = (
                 time_difference.total_seconds() / 3600
             )
+
             if hours_until_match < 24:
                 penalty_percentage = 50
             elif hours_until_match <= 72:
                 penalty_percentage = 20
             else:
                 penalty_percentage = 0
+
             price = float(data["price"])
             penalty_amount = price * (penalty_percentage / 100)
+
             return {
                 "reservation_id": reservation_id,
                 "match_date": data["match_date"].isoformat(),
@@ -323,6 +356,7 @@ def calculate_cancellation_penalty(
                 "penalty_amount": penalty_amount,
                 "refund_amount": price - penalty_amount,
             }
+
     except Exception as e:
         if isinstance(e, HTTPException):
             raise e
@@ -347,10 +381,10 @@ def cancel_ticket(
         request.reservation_id,
         user_id,
     )
+
     try:
         with get_db_cursor() as cursor:
-            # Concurrency lock (FOR UPDATE) on reservation row
-            # during cancellation
+            # Concurrency lock (FOR UPDATE)
             cursor.execute(
                 (
                     "SELECT status, ticket_id FROM reservations "
@@ -359,16 +393,19 @@ def cancel_ticket(
                 (request.reservation_id,),
             )
             reservation = cursor.fetchone()
+
             if not reservation:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="Reservation not found.",
                 )
+
             if reservation["status"] != "paid":
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Reservation is not in 'paid' status.",
                 )
+
             cursor.execute(
                 (
                     "UPDATE reservations SET status = 'cancelled' "
@@ -376,6 +413,16 @@ def cancel_ticket(
                 ),
                 (request.reservation_id,),
             )
+
+            # Fetch current capacity before updating
+            cursor.execute(
+                "SELECT remaining_capacity FROM tickets "
+                "WHERE ticket_id = %s FOR UPDATE;",
+                (reservation["ticket_id"],),
+            )
+            ticket_data = cursor.fetchone()
+            current_capacity = ticket_data["remaining_capacity"]
+
             cursor.execute(
                 (
                     "UPDATE tickets "
@@ -386,6 +433,13 @@ def cancel_ticket(
                 (reservation["ticket_id"],),
             )
             cursor.connection.commit()
+
+            # 🔴 Sync restored capacity to ElasticSearch
+            update_ticket_capacity_in_es(
+                reservation["ticket_id"],
+                current_capacity + 1,
+            )
+
             clear_ticket_cache()
 
             # Waitlist: Notify the next person in line!
@@ -414,6 +468,7 @@ def cancel_ticket(
                 "refund_amount": penalty_data["refund_amount"],
                 "penalty_applied": penalty_data["penalty_amount"],
             }
+
     except Exception as e:
         if isinstance(e, HTTPException):
             raise e
