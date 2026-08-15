@@ -23,9 +23,12 @@ jobs:
           DB_NAME=sports_ticket_db
           REDIS_HOST=redis
           REDIS_PORT=6379
+          REDIS_DB=0
+          REDIS_URL=redis://redis:6379/0
           JWT_SECRET_KEY=super_secret_test_key_for_ci_cd_12345
           JWT_ALGORITHM=HS256
           ACCESS_TOKEN_EXPIRE_MINUTES=30
+          OTP_EXPIRE_SECONDS=120
           EOF
 
       - name: Make init.sh executable
@@ -40,25 +43,9 @@ jobs:
       - name: 1. Start All Services via Docker Compose
         run: docker compose --env-file .env up -d --build
 
-      - name: 2. Wait for Services and DB Seed to Initialize (Robust Wait)
+      - name: 2. Wait for API to be Ready
         run: |
-          echo "Waiting for Postgres to accept connections..."
-          for i in {1..30}; do
-            docker exec sports_ticket_postgres pg_isready -U postgres -d sports_ticket_db && break
-            echo "Waiting for postgres connection..." && sleep 2
-          done
-
-          echo "Waiting for database seed data to be fully loaded (checking tickets table)..."
-          for i in {1..30}; do
-            ROW_COUNT=$(docker exec sports_ticket_postgres psql -U postgres -d sports_ticket_db -t -c "SELECT COUNT(*) FROM tickets;" 2>/dev/null | tr -d ' ')
-            if [ "$ROW_COUNT" ] && [ "$ROW_COUNT" -gt 0 ]; then
-              echo "✅ Database seeded successfully! ($ROW_COUNT tickets found)"
-              break
-            fi
-            echo "Waiting for seed data..." && sleep 2
-          done
-
-          echo "Waiting for API container to complete startup..."
+          echo "Waiting for API container to initialize..."
           for i in {1..30}; do
             if docker logs sports_ticket_api 2>&1 | grep -q -E "Application startup complete|Uvicorn running on"; then
               echo "✅ API is up and running!"
@@ -79,18 +66,19 @@ jobs:
       - name: 4. Check Container Logs for Errors (API)
         run: docker logs sports_ticket_api
 
-      - name: 5. Verify Database Integrity
+      - name: 5. Check Container Logs for Errors (Celery Worker)
+        run: |
+          echo "Checking Celery worker logs for background task readiness..."
+          docker logs sports_ticket_celery || true
+
+      - name: 6. Verify Database Integrity
         run: |
           echo "Checking table structure and record counts inside Docker..."
           docker exec sports_ticket_postgres psql -U postgres -d sports_ticket_db -c "\dt"
           docker exec sports_ticket_postgres psql -U postgres -d sports_ticket_db -c "SELECT COUNT(*) AS total_users FROM users;"
           docker exec sports_ticket_postgres psql -U postgres -d sports_ticket_db -c "SELECT COUNT(*) AS total_tickets FROM tickets;"
 
-      - name: 6. Run Pytest (API Integration Tests inside Docker)
+      - name: 7. Run Pytest (API Integration Tests inside Docker)
         run: |
           echo "Running backend test suite inside the API container..."
-          docker exec sports_ticket_api python -m pytest
-
-      - name: 7. Shutdown Containers
-        if: always()
-        run: docker compose down -v
+          docker exec sports_ticket_api python -m pytest -v
