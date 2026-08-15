@@ -28,18 +28,22 @@ export default function TicketDetail() {
   const handleReserve = async () => {
     setReserving(true);
     try {
-      // Sending a request to the backend to lock the seat in Redis.
-      // We assume your reservation endpoint is /reservations/
       const response = await api.post('/reservations/', {
         ticket_id: parseInt(id),
-        quantity: 1 // For now, we assume the user wants to reserve 1 ticket
+        quantity: 1
       });
       
       toast.success('بلیت با موفقیت برای شما قفل شد! ۱۰ دقیقه زمان دارید. ⏳');
       
-      // Navigating to the payment page (with the reservation ID)
       const resId = response.data.reservation_id || response.data.id || 'new';
-      navigate(`/payment/${resId}`);
+      
+      // 🔴 Correction 1: Sending the ticket price and title to the payment page.
+      navigate(`/payment/${resId}`, { 
+        state: { 
+          price: ticket.price, 
+          title: ticket.title 
+        } 
+      });
     } catch (error) {
       const msg = error.response?.data?.detail || 'خطا در رزرو بلیت. شاید ظرفیت پر شده باشد!';
       toast.error(typeof msg === 'string' ? msg : 'خطای سرور');
@@ -85,7 +89,10 @@ export default function TicketDetail() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="bg-gray-50 p-5 rounded-2xl border border-gray-100">
                 <span className="text-gray-500 text-sm block mb-1">محل برگزاری</span>
-                <span className="text-gray-900 font-bold text-lg">{ticket.venue || ticket.location_name || 'نامشخص'}</span>
+                {/* 🔴 Correction 2: Supporting venue_name from the database */}
+                <span className="text-gray-900 font-bold text-lg">
+                  {ticket.venue_name || ticket.venue || ticket.location_name || 'نامشخص'}
+                </span>
               </div>
               <div className="bg-gray-50 p-5 rounded-2xl border border-gray-100">
                 <span className="text-gray-500 text-sm block mb-1">تیم‌های شرکت‌کننده</span>

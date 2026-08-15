@@ -7,7 +7,7 @@ export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Safe Error Handler
+  // Fetch tickets from API with optional search parameters
   const fetchTickets = async (query = '') => {
     setLoading(true);
     try {
@@ -19,7 +19,7 @@ export default function Dashboard() {
 
       const response = await api.get('/tickets/search', { params });
 
-      // Handle different response structures
+      // Handle various response data structures safely
       let list = [];
       if (Array.isArray(response.data)) {
         list = response.data;
@@ -37,7 +37,7 @@ export default function Dashboard() {
     } catch (error) {
       console.error('Search error:', error);
       setTickets([]);
-      toast.error('خطا در دریافت اطلاعات بلیت‌ها');
+      toast.error('خطا در دریافت اطلاعات بلیط‌ها');
     } finally {
       setLoading(false);
     }
@@ -52,76 +52,74 @@ export default function Dashboard() {
     fetchTickets(searchQuery);
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    window.location.href = '/';
-  };
-
   return (
-    <div className="min-h-screen bg-gray-100 font-sans pb-12">
-      <header className="bg-blue-600 text-white shadow-md py-4 px-6">
-        <div className="max-w-6xl mx-auto flex justify-between items-center">
-          <h1 className="text-2xl font-black">سامانه بلیت مسابقات ورزشی</h1>
-          <button
-            onClick={handleLogout}
-            className="bg-red-500 hover:bg-red-600 text-white text-sm font-bold px-4 py-2 rounded-lg transition-colors"
+    <div className="min-h-screen bg-gray-50 font-sans pb-12">
+      {/* Main Application Header */}
+      <header className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+          <div className="flex items-center space-x-3 space-x-reverse">
+            <span className="text-2xl">🎟️</span>
+            <h1 className="text-xl font-bold text-gray-900">سامانه رزرو بلیت ورزشی</h1>
+          </div>
+          <button 
+            onClick={() => {
+              localStorage.removeItem('token');
+              window.location.href = '/';
+            }}
+            className="text-sm font-medium text-red-600 hover:text-red-800 transition-colors"
           >
             خروج از حساب
           </button>
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto mt-8 px-4">
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 mb-8">
-          <h2 className="text-lg font-bold text-gray-800 mb-3">
-            جستجوی هوشمند بلیت (ElasticSearch)
-          </h2>
-          <form onSubmit={handleSearch} className="flex gap-3">
+      {/* Main Content Container */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8">
+        {/* Search Query Form */}
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-8">
+          <form onSubmit={handleSearch} className="flex gap-4">
             <input
               type="text"
-              placeholder="نام ورزش (فوتبال، والیبال...) یا نام تیم را جستجو کنید..."
-              className="flex-1 px-4 py-3 rounded-xl bg-gray-50 border border-gray-300 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none text-sm transition-all"
+              placeholder="جستجوی تیم، نوع ورزش یا شهر..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              className="flex-1 px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm"
             />
             <button
               type="submit"
               disabled={loading}
-              className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-6 py-3 rounded-xl text-sm transition-colors shadow-sm"
+              className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-6 py-3 rounded-xl transition-all shadow-md hover:shadow-lg disabled:opacity-50 text-sm"
             >
               {loading ? 'در حال جستجو...' : 'جستجو'}
             </button>
           </form>
         </div>
 
+        {/* Tickets Grid Display */}
         {loading ? (
-          <div className="text-center py-12 text-gray-500 font-medium">
-            در حال دریافت بلیت‌ها...
-          </div>
+          <div className="text-center py-12 text-gray-500">در حال دریافت بلیت‌ها...</div>
         ) : tickets.length === 0 ? (
-          <div className="text-center py-12 bg-white rounded-2xl border border-gray-200 text-gray-500">
-            هیچ بلیطی یافت نشد.
+          <div className="text-center py-12 text-gray-500 bg-white rounded-2xl border border-gray-100">
+            هیچ بلیتی یافت نشد.
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {tickets.map((t, index) => (
-              <div
-                key={t.id || t.ticket_id || index}
-                className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-all"
-              >
-                <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-4 text-white">
-                  <span className="bg-white/20 text-xs font-bold px-2.5 py-1 rounded-full inline-block mb-2">
+            {tickets.map((t, idx) => (
+              <div key={t.id || t.ticket_id || idx} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow">
+                <div className="bg-blue-600 p-4 text-white">
+                  <span className="text-xs bg-blue-500 px-2.5 py-1 rounded-full font-medium">
                     {t.sport_type || 'ورزشی'}
                   </span>
-                  <h3 className="text-base font-extrabold">
+                  <h3 className="font-bold text-lg mt-2">
                     {t.title || `${t.home_team || 'تیم ۱'} vs ${t.away_team || 'تیم ۲'}`}
                   </h3>
                 </div>
                 <div className="p-5 space-y-3 text-sm text-gray-600">
                   <div className="flex justify-between">
                     <span>ورزشگاه:</span>
+                    {/* Updated to check venue_name first for DB/ElasticSearch compatibility */}
                     <span className="font-bold text-gray-800">
-                      {t.venue || t.location_name || 'نامشخص'}
+                      {t.venue_name || t.venue || t.location_name || 'نامشخص'}
                     </span>
                   </div>
                   <div className="flex justify-between">
@@ -138,7 +136,8 @@ export default function Dashboard() {
                   </div>
                   <button 
                     onClick={() => window.location.href = `/tickets/${t.id || t.ticket_id}`}
-                      className="w-full mt-2 bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white font-bold py-2.5 rounded-xl transition-all text-xs">
+                    className="w-full mt-2 bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white font-bold py-2.5 rounded-xl transition-all text-xs"
+                  >
                     رزرو بلیت
                   </button>
                 </div>

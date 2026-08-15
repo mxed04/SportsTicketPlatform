@@ -3,6 +3,7 @@ import { Toaster } from 'react-hot-toast';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import TicketDetail from './pages/TicketDetail';
+import Payment from './pages/Payment';
 
 const PrivateRoute = ({ children }) => {
   const token = localStorage.getItem('token');
@@ -23,12 +24,20 @@ function App() {
             </PrivateRoute>
           } 
         />
-        {/* 🔴 مسیر جدید برای جزئیات بلیت */}
         <Route 
           path="/tickets/:id" 
           element={
             <PrivateRoute>
               <TicketDetail />
+            </PrivateRoute>
+          } 
+        />
+        {/* 🔴 این دقیقاً همان خطی است که ری‌اکت دنبالش می‌گشت! */}
+        <Route 
+          path="/payment/:reservationId" 
+          element={
+            <PrivateRoute>
+              <Payment />
             </PrivateRoute>
           } 
         />
