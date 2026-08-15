@@ -4,6 +4,7 @@ from jose import jwt, JWTError
 from app.schemas.reservations import ReservationRequest, ReservationResponse
 from app.database import get_db_cursor
 from app.config import settings
+from app.es_client import update_ticket_capacity_in_es
 
 # 🔴 Imported add_to_waitlist
 from app.redis_client import clear_ticket_cache, add_to_waitlist
@@ -143,6 +144,11 @@ def reserve_ticket(
             )
             reservation = cursor.fetchone()
             cursor.connection.commit()
+            # 🔴 Sync new capacity to ElasticSearch
+            update_ticket_capacity_in_es(
+                data.ticket_id, 
+                ticket["remaining_capacity"] - 1
+            )
             clear_ticket_cache()
 
             # Executing Celery tasks
