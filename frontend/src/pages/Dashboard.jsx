@@ -136,7 +136,9 @@ export default function Dashboard() {
                       {t.remaining_capacity ?? t.capacity ?? 0} نفر
                     </span>
                   </div>
-                  <button className="w-full mt-2 bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white font-bold py-2.5 rounded-xl transition-all text-xs">
+                  <button 
+                    onClick={() => window.location.href = `/tickets/${t.id || t.ticket_id}`}
+                      className="w-full mt-2 bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white font-bold py-2.5 rounded-xl transition-all text-xs">
                     رزرو بلیت
                   </button>
                 </div>

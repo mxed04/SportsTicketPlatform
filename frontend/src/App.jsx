@@ -2,8 +2,8 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { Toaster } from 'react-hot-toast';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
+import TicketDetail from './pages/TicketDetail';
 
-// PrivateRoute component to protect routes that require authentication
 const PrivateRoute = ({ children }) => {
   const token = localStorage.getItem('token');
   return token ? children : <Navigate to="/" />;
@@ -20,6 +20,15 @@ function App() {
           element={
             <PrivateRoute>
               <Dashboard />
+            </PrivateRoute>
+          } 
+        />
+        {/* 🔴 مسیر جدید برای جزئیات بلیت */}
+        <Route 
+          path="/tickets/:id" 
+          element={
+            <PrivateRoute>
+              <TicketDetail />
             </PrivateRoute>
           } 
         />
