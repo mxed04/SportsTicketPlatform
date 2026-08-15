@@ -1,40 +1,84 @@
-name: Phase 2 CI - Dockerized Database & Query Verification
+name: Phase 3 CI - Full Stack Verification
 
 on:
   push:
-    branches: [phase2-database-implementation, main]
+    branches: [main, phase3-backend-implementation]
   pull_request:
-    branches: [phase2-database-implementation, main]
+    branches: [main]
 
 jobs:
-  verify-docker-database:
+  verify-full-stack:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository code
         uses: actions/checkout@v4
 
+      - name: Create .env file
+        run: |
+          cat > .env <<EOF
+          DB_HOST=postgres_db
+          DB_PORT=5432
+          DB_USER=postgres
+          DB_PASSWORD=persianlord@0171
+          DB_NAME=sports_ticket_db
+          REDIS_HOST=redis
+          REDIS_PORT=6379
+          REDIS_DB=0
+          REDIS_URL=redis://redis:6379/0
+          JWT_SECRET_KEY=super_secret_test_key_for_ci_cd_12345
+          JWT_ALGORITHM=HS256
+          ACCESS_TOKEN_EXPIRE_MINUTES=30
+          OTP_EXPIRE_SECONDS=120
+          EOF
+
       - name: Make init.sh executable
         run: chmod +x database/init.sh
 
-      - name: 1. Start Database via Docker Compose
-        run: docker compose up -d
+      - name: Log in to Docker Hub to avoid Rate Limits
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: 2. Wait for Database Initialization to Complete
+      - name: 1. Start All Services via Docker Compose
+        run: docker compose --env-file .env up -d --build
+
+      - name: 2. Wait for API to be Ready
         run: |
-          echo "Waiting for Postgres container to run initialization scripts..."
-          sleep 10
+          echo "Waiting for API container to initialize..."
+          for i in {1..30}; do
+            if docker logs sports_ticket_api 2>&1 | grep -q -E "Application startup complete|Uvicorn running on"; then
+              echo "✅ API is up and running!"
+              break
+            fi
+            echo "Waiting for API..." && sleep 2
+          done
 
-      - name: 3. Check Container Logs for Errors
+          if [ "$(docker inspect -f '{{.State.Running}}' sports_ticket_api 2>/dev/null)" != "true" ]; then
+            echo "❌ API container crashed! Printing logs:"
+            docker logs sports_ticket_api
+            exit 1
+          fi
+
+      - name: 3. Check Container Logs for Errors (Database)
         run: docker logs sports_ticket_postgres
 
-      - name: 4. Verify Final Database Integrity
+      - name: 4. Check Container Logs for Errors (API)
+        run: docker logs sports_ticket_api
+
+      - name: 5. Check Container Logs for Errors (Celery Worker)
+        run: |
+          echo "Checking Celery worker logs for background task readiness..."
+          docker logs sports_ticket_celery || true
+
+      - name: 6. Verify Database Integrity
         run: |
           echo "Checking table structure and record counts inside Docker..."
           docker exec sports_ticket_postgres psql -U postgres -d sports_ticket_db -c "\dt"
           docker exec sports_ticket_postgres psql -U postgres -d sports_ticket_db -c "SELECT COUNT(*) AS total_users FROM users;"
           docker exec sports_ticket_postgres psql -U postgres -d sports_ticket_db -c "SELECT COUNT(*) AS total_tickets FROM tickets;"
 
-      - name: 5. Shutdown Containers
-        if: always()
-        run: docker compose down -v
+      - name: 7. Run Pytest (API Integration Tests inside Docker)
+        run: |
+          echo "Running backend test suite inside the API container..."
+          docker exec sports_ticket_api python -m pytest -v

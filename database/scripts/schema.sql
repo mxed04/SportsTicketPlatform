@@ -21,7 +21,7 @@ DROP TYPE IF EXISTS payment_status CASCADE;
 DROP TYPE IF EXISTS sport_type_enum CASCADE;
 
 -- Define custom ENUM types
-CREATE TYPE user_role AS ENUM ('audience', 'support');
+CREATE TYPE user_role AS ENUM ('audience', 'support', 'admin');
 CREATE TYPE reservation_status AS ENUM ('pending', 'paid', 'cancelled');
 CREATE TYPE payment_status AS ENUM ('successful', 'failed', 'pending');
 CREATE TYPE sport_type_enum AS ENUM ('football', 'volleyball', 'basketball');

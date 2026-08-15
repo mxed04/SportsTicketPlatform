@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   postgres_db:
     image: postgres:16-alpine
@@ -8,9 +6,9 @@ services:
     environment:
       POSTGRES_DB: sports_ticket_db
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_PASSWORD: persianlord@0171
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - ./database/scripts:/scripts
       - ./database/init.sh:/docker-entrypoint-initdb.d/01-init.sh
@@ -20,6 +18,58 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+
+  redis:
+    image: redis:alpine
+    container_name: sports_ticket_redis
+    restart: always
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  api:
+    build:
+      context: ./backend
+    container_name: sports_ticket_api
+    restart: always
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres_db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - .env
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.settimeout(2); s.connect(('127.0.0.1', 8000)); s.close()",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  celery_worker:
+    build:
+      context: ./backend
+    container_name: sports_ticket_celery
+    command: celery -A app.tasks.reservation_tasks.celery_app worker --loglevel=info
+    env_file:
+      - .env
+    depends_on:
+      postgres_db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: always
 
 volumes:
   postgres_data:
