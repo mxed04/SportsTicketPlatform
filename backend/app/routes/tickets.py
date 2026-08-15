@@ -1,8 +1,19 @@
-from fastapi import APIRouter, HTTPException, Query, Path, status
+# 🔴 Added Request
+from fastapi import (
+    APIRouter,
+    HTTPException,
+    Query,
+    Path,
+    status,
+    Request,
+)
 import json
 from app.database import get_db_cursor
 from app.redis_client import redis_client
 from app.schemas.tickets import TicketDetailResponse, TicketListResponse
+
+# 🔴 Imported limiter
+from app.rate_limiter import limiter
 
 router = APIRouter(prefix="/api/tickets", tags=["Tickets"])
 
@@ -13,7 +24,9 @@ router = APIRouter(prefix="/api/tickets", tags=["Tickets"])
     status_code=status.HTTP_200_OK,
     summary="Advanced Ticket Search with Caching & Fuzzy",
 )
+@limiter.limit("20/minute")  # 🔴 Safety guard: Maximum 20 times per minute
 def search_tickets(
+    request: Request,  # 🔴 Safety guard: Maximum 20 times per minute
     sport_type: str | None = Query(
         None,
         description="Sport type: football, volleyball, basketball",
@@ -30,13 +43,15 @@ def search_tickets(
         description="Maximum ticket price",
     ),
     team_name: str | None = Query(
-        None, description="Team name (home or away)"
+        None,
+        description="Team name (home or away)",
     ),
     ticket_tier: str | None = Query(
         None, description="Ticket tier: VIP, Normal, Premium"
     ),
     start_date: str | None = Query(
-        None, description="Start date (YYYY-MM-DD)"
+        None,
+        description="Start date (YYYY-MM-DD)",
     ),
 ):
     cache_key = (
@@ -106,12 +121,8 @@ def search_tickets(
                 # 🔴 Dynamic Surge Pricing Logic
                 base_price = float(item["price"])
                 remaining = int(item["remaining_capacity"])
-
-                # Hardcoded assumed total capacity (e.g., 5000)
-                # In a real app, from stadium/venue table.
                 total_capacity = 5000
 
-                # If capacity low (< 20%), increase price 15%
                 if remaining > 0 and remaining < (total_capacity * 0.20):
                     surge_price = base_price * 1.15
                     item["price"] = round(surge_price, 2)
@@ -135,12 +146,12 @@ def search_tickets(
                 if team_name:
                     fuzzy_query += (
                         " AND (home_team <-> %s < 0.6 OR "
-                        " away_team <-> %s < 0.6)"
+                        "away_team <-> %s < 0.6)"
                     )
                     fuzzy_params.extend([team_name, team_name])
                     fuzzy_query += (
                         " ORDER BY LEAST(home_team <-> %s, "
-                        " away_team <-> %s) ASC"
+                        "away_team <-> %s) ASC"
                     )
                     fuzzy_params.extend([team_name, team_name])
                 elif venue:
@@ -177,12 +188,10 @@ def search_tickets(
     "/{ticket_id}",
     response_model=TicketDetailResponse,
     status_code=status.HTTP_200_OK,
-    summary="Get ticket details with JOINs & COALESCE",
+    summary="Get ticket details with JOINs, COALESCE & Surge Pricing",
 )
 def get_ticket_details(
-    ticket_id: int = Path(
-        ..., gt=0, description="The ID of the ticket"
-    )
+    ticket_id: int = Path(..., gt=0, description="The ID of the ticket")
 ):
     try:
         with get_db_cursor() as cursor:
