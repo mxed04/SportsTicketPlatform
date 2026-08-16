@@ -14,10 +14,6 @@ router = APIRouter(prefix="/api/admin", tags=["Admin Dashboard"])
 def verify_admin_or_support_role(
     user_id: int = Depends(get_current_user_id),
 ) -> int:
-    """
-    Access level validation: Only users with 'admin' or 'support' role
-    are permitted. Otherwise, returns a 403 Forbidden HTTP exception.
-    """
     with get_db_cursor() as cursor:
         cursor.execute(
             "SELECT role FROM users WHERE user_id = %s;",
@@ -36,35 +32,34 @@ def verify_admin_or_support_role(
     "/dashboard-stats",
     response_model=DashboardStatsResponse,
     status_code=status.HTTP_200_OK,
-    summary="Get aggregated statistics for the admin dashboard",
 )
 def get_dashboard_stats(
     user_id: int = Depends(verify_admin_or_support_role),
 ):
     try:
         with get_db_cursor() as cursor:
-            # Query total revenue
+            # 1. Revenue (Fixed to 'successful' based on schema.sql)
             cursor.execute(
                 "SELECT COALESCE(SUM(amount), 0) AS total_revenue "
-                "FROM payments WHERE status = 'completed';"
+                "FROM payments WHERE status = 'successful';"
             )
             revenue = cursor.fetchone()["total_revenue"]
 
-            # Query total confirmed ticket sales
+            # 2. Tickets Sold (Fixed to 'paid' based on schema.sql)
             cursor.execute(
                 "SELECT COUNT(*) AS total_tickets_sold "
-                "FROM reservations WHERE status = 'confirmed';"
+                "FROM reservations WHERE status = 'paid';"
             )
             tickets_sold = cursor.fetchone()["total_tickets_sold"]
 
-            # Query total cancellations
+            # 3. Cancellations
             cursor.execute(
                 "SELECT COUNT(*) AS total_cancellations "
                 "FROM reservations WHERE status = 'cancelled';"
             )
             cancellations = cursor.fetchone()["total_cancellations"]
 
-            # Query pending support reports
+            # 4. Pending Reports
             cursor.execute(
                 "SELECT COUNT(*) AS pending_reports FROM reports "
                 "WHERE status IN ('under_review', 'pending');"
@@ -78,6 +73,7 @@ def get_dashboard_stats(
                 "pending_reports": pending_reports,
             }
     except Exception as e:
+        print(f"🔥 Admin Stats Error: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Database error: {str(e)}",
@@ -88,7 +84,6 @@ def get_dashboard_stats(
     "/reports",
     response_model=list[AdminReportResponse],
     status_code=status.HTTP_200_OK,
-    summary="Get all user reports for admin dashboard",
 )
 def get_all_reports_for_admin(
     user_id: int = Depends(verify_admin_or_support_role),
@@ -100,7 +95,7 @@ def get_all_reports_for_admin(
                 SELECT
                     r.report_id,
                     r.user_id,
-                    CONCAT(u.first_name, ' ', u.last_name) AS user_name,
+                    u.first_name || ' ' || u.last_name AS user_name,
                     r.ticket_id,
                     r.reservation_id,
                     r.category,
@@ -115,6 +110,7 @@ def get_all_reports_for_admin(
             )
             return cursor.fetchall()
     except Exception as e:
+        print(f"🔥 Admin Reports Error: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Database error: {str(e)}",
@@ -124,7 +120,6 @@ def get_all_reports_for_admin(
 @router.put(
     "/reports/{report_id}/reply",
     status_code=status.HTTP_200_OK,
-    summary="Submit admin response to a user ticket",
 )
 def reply_to_report(
     report_id: int,
@@ -142,14 +137,12 @@ def reply_to_report(
                 """,
                 (data.admin_response, data.status, report_id),
             )
-
             updated = cursor.fetchone()
             if not updated:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Report not found in database.",
+                    detail="Ticket not found.",
                 )
-
             cursor.connection.commit()
             return {"message": "Admin reply registered successfully."}
     except Exception as e:
@@ -164,7 +157,6 @@ def reply_to_report(
 @router.put(
     "/manage",
     status_code=status.HTTP_200_OK,
-    summary="Update status for a reservation or report",
 )
 def manage_entity(
     data: AdminManageRequest,
@@ -175,20 +167,14 @@ def manage_entity(
         if data.new_status not in valid_statuses:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=(
-                    f"Invalid status '{data.new_status}' for report. "
-                    f"Allowed values: {', '.join(valid_statuses)}"
-                ),
+                detail=f"Invalid report status: {data.new_status}",
             )
     else:
-        valid_statuses = ["pending", "confirmed", "cancelled"]
+        valid_statuses = ["pending", "paid", "cancelled"]
         if data.new_status not in valid_statuses:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=(
-                    f"Invalid status '{data.new_status}' for reservation. "
-                    f"Allowed values: {', '.join(valid_statuses)}"
-                ),
+                detail=f"Invalid reservation status: {data.new_status}",
             )
 
     try:
@@ -213,16 +199,57 @@ def manage_entity(
                 )
 
             cursor.connection.commit()
-            return {
-                "message": (
-                    f"{data.entity_type.capitalize()} status updated to "
-                    f"'{data.new_status}' successfully."
-                )
-            }
+            return {"message": "Status updated successfully."}
     except Exception as e:
         if isinstance(e, HTTPException):
             raise e
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Database error: {str(e)}",
+        )
+
+
+@router.get(
+    "/users",
+    status_code=status.HTTP_200_OK,
+    summary="Get list of all users for admin dashboard",
+)
+def get_all_users(
+    user_id: int = Depends(verify_admin_or_support_role),
+):
+    try:
+        with get_db_cursor() as cursor:
+            cursor.execute(
+                "SELECT user_id, first_name, last_name, phone_number, "
+                "email, role, city, is_active, created_at "
+                "FROM users ORDER BY created_at DESC;"
+            )
+            return cursor.fetchall()
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        )
+
+
+@router.get(
+    "/tickets",
+    status_code=status.HTTP_200_OK,
+    summary="Get list of all tickets for admin dashboard",
+)
+def get_all_tickets_admin(
+    user_id: int = Depends(verify_admin_or_support_role),
+):
+    try:
+        with get_db_cursor() as cursor:
+            cursor.execute(
+                "SELECT ticket_id, home_team, away_team, sport_type, "
+                "match_date, price, remaining_capacity, is_active "
+                "FROM tickets ORDER BY match_date DESC;"
+            )
+            return cursor.fetchall()
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
         )
