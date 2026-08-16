@@ -62,8 +62,14 @@ export default function Dashboard() {
             <h1 className="text-xl font-bold text-gray-900">سامانه رزرو بلیت ورزشی</h1>
           </div>
           
-          {/* Action Buttons (Profile & Logout) */}
+          {/* Action Buttons (Support, Profile & Logout) */}
           <div className="flex items-center gap-4">
+            <button 
+              onClick={() => window.location.href = '/support'}
+              className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors hidden sm:block"
+            >
+              🎧 پشتیبانی
+            </button>
             <button 
               onClick={() => window.location.href = '/profile'}
               className="text-sm font-medium text-blue-600 hover:text-blue-800 transition-colors bg-blue-50 px-3 py-1.5 rounded-lg"
