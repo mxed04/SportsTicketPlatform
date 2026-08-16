@@ -31,8 +31,11 @@ const getUserRole = () => {
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const [tickets, setTickets] = useState([]);
-  const [loading, setLoading] = useState(false);
+  
+  // Data States
+  const [allTickets, setAllTickets] = useState([]); // Original data from API
+  const [tickets, setTickets] = useState([]);       // Filtered display data
+  const [loading, setLoading] = useState(true);
 
   // Search and Filter States
   const [searchQuery, setSearchQuery] = useState('');
@@ -42,76 +45,66 @@ export default function Dashboard() {
   const userRole = getUserRole();
   const isAdminOrSupport = userRole === 'admin' || userRole === 'support';
 
-  // Fetch tickets with query params (Connects to ElasticSearch / DB API)
-  const fetchTickets = async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams();
-      if (searchQuery.trim()) params.append('q', searchQuery.trim());
-      if (selectedSport !== 'all') params.append('sport_type', selectedSport);
-      if (venueFilter.trim()) params.append('venue', venueFilter.trim());
-
-      const url = params.toString() 
-        ? `/tickets/search?${params.toString()}` 
-        : '/tickets/';
-        
-      const response = await api.get(url);
-      const rawData = response.data?.tickets || response.data || [];
-      const ticketsList = Array.isArray(rawData) ? rawData : [];
-
-      setTickets(ticketsList);
-    } catch (error) {
-      // Fallback filtering if backend search endpoint differs
-      try {
-        const fallbackRes = await api.get('/tickets/');
-        const fallbackData = (
-          fallbackRes.data?.tickets || fallbackRes.data || []
-        );
-        let list = Array.isArray(fallbackData) ? fallbackData : [];
-
-        if (searchQuery.trim()) {
-          const q = searchQuery.toLowerCase();
-          list = list.filter((t) => {
-            const home = (t.home_team || '').toLowerCase();
-            const away = (t.away_team || '').toLowerCase();
-            const title = (t.title || '').toLowerCase();
-            const venue = (t.venue_name || t.venue || '').toLowerCase();
-            return (
-              home.includes(q) || 
-              away.includes(q) || 
-              title.includes(q) || 
-              venue.includes(q)
-            );
-          });
-        }
-
-        if (selectedSport !== 'all') {
-          list = list.filter((t) => t.sport_type === selectedSport);
-        }
-
-        if (venueFilter.trim()) {
-          const v = venueFilter.toLowerCase();
-          list = list.filter((t) => 
-            (t.venue_name || t.venue || '').toLowerCase().includes(v)
-          );
-        }
-
-        setTickets(list);
-      } catch (e) {
-        toast.error('خطا در دریافت لیست بلیت‌ها');
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Debounced search effect for optimal UI performance
+  // 1. Fetch ALL tickets ONLY ONCE when the component mounts
   useEffect(() => {
-    const timer = setTimeout(() => {
-      fetchTickets();
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [searchQuery, selectedSport, venueFilter]);
+    const fetchInitialTickets = async () => {
+      try {
+        // We MUST use /tickets/search as /tickets does not exist in FastAPI
+        const response = await api.get('/tickets/search');
+        const rawData = response.data?.tickets || response.data || [];
+        const ticketsList = Array.isArray(rawData) ? rawData : [];
+        
+        setAllTickets(ticketsList);
+        setTickets(ticketsList);
+      } catch (error) {
+        console.error("Fetch Error:", error);
+        toast.error('خطا در ارتباط با سرور برای دریافت بلیت‌ها');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchInitialTickets();
+  }, []);
+
+  // 2. Instant Local Filtering (Bypasses 429 Rate Limits completely!)
+  useEffect(() => {
+    let filteredList = [...allTickets];
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      filteredList = filteredList.filter((t) => {
+        const home = (t.home_team || '').toLowerCase();
+        const away = (t.away_team || '').toLowerCase();
+        const title = (t.title || '').toLowerCase();
+        const venue = (t.venue_name || t.venue || t.location_name || '')
+          .toLowerCase();
+          
+        return (
+          home.includes(q) || 
+          away.includes(q) || 
+          title.includes(q) || 
+          venue.includes(q)
+        );
+      });
+    }
+
+    if (selectedSport !== 'all') {
+      filteredList = filteredList.filter(
+        (t) => t.sport_type === selectedSport
+      );
+    }
+
+    if (venueFilter.trim()) {
+      const v = venueFilter.toLowerCase();
+      filteredList = filteredList.filter((t) => 
+        (t.venue_name || t.venue || t.location_name || '').toLowerCase()
+        .includes(v)
+      );
+    }
+
+    setTickets(filteredList);
+  }, [searchQuery, selectedSport, venueFilter, allTickets]);
 
   const handleClearFilters = () => {
     setSearchQuery('');
@@ -217,7 +210,7 @@ export default function Dashboard() {
         {/* Tickets Results Grid */}
         {loading ? (
           <div className="text-center py-20 text-gray-500 font-bold animate-pulse">
-            در حال دریافت و فیلتر بلیت‌ها...
+            در حال دریافت اطلاعات از سرور...
           </div>
         ) : tickets.length === 0 ? (
           <div className="bg-white rounded-2xl p-12 text-center border border-dashed border-gray-300">
