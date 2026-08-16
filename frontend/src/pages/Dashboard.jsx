@@ -2,10 +2,40 @@ import { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import api from '../api';
 
+/**
+ * Helper function to safely extract the user role from JWT token or localStorage.
+ */
+const getUserRole = () => {
+  const token = localStorage.getItem('token');
+  if (!token) return null;
+
+  try {
+    const payloadBase64 = token.split('.')[1];
+    if (payloadBase64) {
+      const base64 = payloadBase64.replace(/-/g, '+').replace(/_/g, '/');
+      const jsonPayload = decodeURIComponent(
+        atob(base64)
+          .split('')
+          .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+          .join('')
+      );
+      const decoded = JSON.parse(jsonPayload);
+      if (decoded.role) return decoded.role;
+    }
+  } catch (error) {
+    console.error('Error decoding token role:', error);
+  }
+  return localStorage.getItem('role') || 'audience';
+};
+
 export default function Dashboard() {
   const [tickets, setTickets] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Check if current user is an admin or support staff
+  const userRole = getUserRole();
+  const isAdminOrSupport = userRole === 'admin' || userRole === 'support';
 
   // Fetch tickets from API with optional search parameters
   const fetchTickets = async (query = '') => {
@@ -62,11 +92,21 @@ export default function Dashboard() {
             <h1 className="text-xl font-bold text-gray-900">سامانه رزرو بلیت ورزشی</h1>
           </div>
           
-          {/* Action Buttons (Support, Profile & Logout) */}
-          <div className="flex items-center gap-4">
+          {/* Action Buttons (Admin Panel, Support, Profile & Logout) */}
+          <div className="flex items-center gap-3">
+            {/* Conditional Rendering: Show Admin Panel button only for admin or support roles */}
+            {isAdminOrSupport && (
+              <button 
+                onClick={() => window.location.href = '/admin'}
+                className="text-sm font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 shadow-sm"
+              >
+                👑 پنل مدیریت
+              </button>
+            )}
+
             <button 
               onClick={() => window.location.href = '/support'}
-              className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors hidden sm:block"
+              className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors hidden sm:block px-2 py-1.5"
             >
               🎧 پشتیبانی
             </button>
@@ -79,6 +119,7 @@ export default function Dashboard() {
             <button 
               onClick={() => {
                 localStorage.removeItem('token');
+                localStorage.removeItem('role');
                 window.location.href = '/';
               }}
               className="text-sm font-medium text-red-600 hover:text-red-800 transition-colors"
