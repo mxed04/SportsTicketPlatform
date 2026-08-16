@@ -4,12 +4,12 @@ from elasticsearch import Elasticsearch
 
 logger = logging.getLogger(__name__)
 
-# Getting the Elastic IP address from the .env file
+# Fetch Elasticsearch URL from environment variables
 ELASTICSEARCH_URL = os.getenv(
     "ELASTICSEARCH_URL", "http://elasticsearch:9200"
 )
 
-# Creating the main Elasticsearch client
+# Initialize the Elasticsearch client
 es = Elasticsearch(ELASTICSEARCH_URL)
 
 INDEX_NAME = "tickets"
@@ -17,12 +17,11 @@ INDEX_NAME = "tickets"
 
 def init_elasticsearch():
     """
-    Checking for the existence of the index and creating it with
-    Autocomplete-related settings.
+    Initialize the Elasticsearch index with proper settings and
+    mappings for fuzzy search and autocomplete.
     """
     try:
         if not es.indices.exists(index=INDEX_NAME):
-            # Edge N-Gram settings for fragmenting words as user types
             settings = {
                 "analysis": {
                     "analyzer": {
@@ -46,16 +45,9 @@ def init_elasticsearch():
                 }
             }
 
-            # Mapping (Structure) for the ticket data
             mappings = {
                 "properties": {
                     "ticket_id": {"type": "integer"},
-                    "title": {
-                        "type": "text",
-                        "analyzer": "autocomplete_analyzer",
-                        "search_analyzer": "autocomplete_search_analyzer",
-                    },
-                    "sport_type": {"type": "keyword"},
                     "home_team": {
                         "type": "text",
                         "analyzer": "autocomplete_analyzer",
@@ -66,14 +58,17 @@ def init_elasticsearch():
                         "analyzer": "autocomplete_analyzer",
                         "search_analyzer": "autocomplete_search_analyzer",
                     },
+                    "title": {
+                        "type": "text",
+                        "analyzer": "autocomplete_analyzer",
+                        "search_analyzer": "autocomplete_search_analyzer",
+                    },
                     "venue_name": {
                         "type": "text",
                         "analyzer": "autocomplete_analyzer",
                         "search_analyzer": "autocomplete_search_analyzer",
                     },
-                    "city": {"type": "keyword"},
-                    "ticket_tier": {"type": "keyword"},
-                    "organizer": {"type": "text"},
+                    "sport_type": {"type": "keyword"},
                     "match_date": {"type": "date"},
                     "price": {"type": "double"},
                     "remaining_capacity": {"type": "integer"},
@@ -86,35 +81,45 @@ def init_elasticsearch():
                 settings=settings,
                 mappings=mappings,
             )
-            logger.info(
-                f"✅ Elasticsearch index '{INDEX_NAME}' "
-                "created successfully."
-            )
+            logger.info(f"✅ ES Index '{INDEX_NAME}' created successfully.")
         else:
-            logger.info(
-                f"⚡ Elasticsearch index '{INDEX_NAME}' "
-                "already exists."
-            )
+            logger.info(f"⚡ ES Index '{INDEX_NAME}' already exists.")
     except Exception as e:
-        logger.error(
-            f"❌ Failed to connect/initialize Elasticsearch: {e}"
-        )
+        logger.error(f"❌ ES Initialization failed: {e}")
+
+
+def index_ticket_in_es(ticket_id: int, ticket_data: dict):
+    """
+    Index or update a full ticket document in Elasticsearch.
+    """
+    try:
+        es.index(index=INDEX_NAME, id=str(ticket_id), document=ticket_data)
+        logger.info(f"🔄 ES Sync: Ticket {ticket_id} indexed.")
+    except Exception as e:
+        logger.error(f"❌ ES Sync failed for ticket {ticket_id}: {e}")
 
 
 def update_ticket_capacity_in_es(ticket_id: int, new_capacity: int):
     """
-    Update ticket remaining capacity in ElasticSearch in real-time.
+    Real-time update of ticket remaining capacity in ElasticSearch.
     """
     try:
         es.update(
             index=INDEX_NAME,
             id=str(ticket_id),
-            doc={"remaining_capacity": new_capacity}
+            doc={"remaining_capacity": new_capacity},
         )
-        logger.info(
-            f"🔄 ES Sync: Ticket {ticket_id} capacity -> {new_capacity}"
-        )
+        logger.info(f"🔄 ES Sync: Ticket {ticket_id} cap -> {new_capacity}")
     except Exception as e:
-        logger.error(
-            f"❌ ES Sync failed for ticket {ticket_id}: {e}"
-        )
+        logger.error(f"❌ ES Capacity Sync failed for ticket {ticket_id}: {e}")
+
+
+def delete_ticket_in_es(ticket_id: int):
+    """
+    Remove a ticket from Elasticsearch.
+    """
+    try:
+        es.delete(index=INDEX_NAME, id=str(ticket_id))
+        logger.info(f"🗑️ ES Sync: Ticket {ticket_id} deleted.")
+    except Exception as e:
+        logger.error(f"❌ ES Deletion failed for ticket {ticket_id}: {e}")
