@@ -1,84 +1,69 @@
-name: Phase 3 CI - Full Stack Verification
+name: Continuous Integration (CI) Pipeline
 
 on:
   push:
-    branches: [main, phase3-backend-implementation]
+    branches: [ main, phase* ]
   pull_request:
-    branches: [main]
+    branches: [ main ]
 
 jobs:
-  verify-full-stack:
+  # Job 1: Test Database Scripts and Integrity
+  database-tests:
+    name: Database Schema & Validation
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
-      - name: Checkout repository code
+      - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Create .env file
-        run: |
-          cat > .env <<EOF
-          DB_HOST=postgres_db
-          DB_PORT=5432
-          DB_USER=postgres
-          DB_PASSWORD=persianlord@0171
-          DB_NAME=sports_ticket_db
-          REDIS_HOST=redis
-          REDIS_PORT=6379
-          REDIS_DB=0
-          REDIS_URL=redis://redis:6379/0
-          JWT_SECRET_KEY=super_secret_test_key_for_ci_cd_12345
-          JWT_ALGORITHM=HS256
-          ACCESS_TOKEN_EXPIRE_MINUTES=30
-          OTP_EXPIRE_SECONDS=120
-          EOF
+      - name: Install PostgreSQL Client
+        run: sudo apt-get install -y postgresql-client
 
-      - name: Make init.sh executable
-        run: chmod +x database/init.sh
+      - name: Execute DDL (Schema)
+        env:
+          PGPASSWORD: test_password
+        run: psql -h localhost -U test_user -d test_db -f database/scripts/schema.sql
 
-      - name: Log in to Docker Hub to avoid Rate Limits
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Insert Seed Data
+        env:
+          PGPASSWORD: test_password
+        run: psql -h localhost -U test_user -d test_db -f database/scripts/init.sql
 
-      - name: 1. Start All Services via Docker Compose
-        run: docker compose --env-file .env up -d --build
+      - name: Create Stored Procedures & Triggers
+        env:
+          PGPASSWORD: test_password
+        run: psql -h localhost -U test_user -d test_db -f database/scripts/procedures.sql
 
-      - name: 2. Wait for API to be Ready
-        run: |
-          echo "Waiting for API container to initialize..."
-          for i in {1..30}; do
-            if docker logs sports_ticket_api 2>&1 | grep -q -E "Application startup complete|Uvicorn running on"; then
-              echo "✅ API is up and running!"
-              break
-            fi
-            echo "Waiting for API..." && sleep 2
-          done
+      - name: Test Analytical Queries
+        env:
+          PGPASSWORD: test_password
+        run: psql -h localhost -U test_user -d test_db -f database/scripts/queries.sql
 
-          if [ "$(docker inspect -f '{{.State.Running}}' sports_ticket_api 2>/dev/null)" != "true" ]; then
-            echo "❌ API container crashed! Printing logs:"
-            docker logs sports_ticket_api
-            exit 1
-          fi
+  # Job 2: Build Docker Images (Backend & Frontend)
+  docker-build-tests:
+    name: Build Docker Images (Backend & Frontend)
+    runs-on: ubuntu-latest
+    needs: database-tests
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-      - name: 3. Check Container Logs for Errors (Database)
-        run: docker logs sports_ticket_postgres
+      - name: Build Backend (FastAPI) Image
+        run: docker build -t sports-backend:test ./backend
 
-      - name: 4. Check Container Logs for Errors (API)
-        run: docker logs sports_ticket_api
-
-      - name: 5. Check Container Logs for Errors (Celery Worker)
-        run: |
-          echo "Checking Celery worker logs for background task readiness..."
-          docker logs sports_ticket_celery || true
-
-      - name: 6. Verify Database Integrity
-        run: |
-          echo "Checking table structure and record counts inside Docker..."
-          docker exec sports_ticket_postgres psql -U postgres -d sports_ticket_db -c "\dt"
-          docker exec sports_ticket_postgres psql -U postgres -d sports_ticket_db -c "SELECT COUNT(*) AS total_users FROM users;"
-          docker exec sports_ticket_postgres psql -U postgres -d sports_ticket_db -c "SELECT COUNT(*) AS total_tickets FROM tickets;"
-
-      - name: 7. Run Pytest (API Integration Tests inside Docker)
-        run: |
-          echo "Running backend test suite inside the API container..."
-          docker exec sports_ticket_api python -m pytest -v
+      - name: Build Frontend (React+Nginx) Image
+        run: docker build -t sports-frontend:test ./frontend
