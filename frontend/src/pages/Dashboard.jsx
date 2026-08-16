@@ -3,13 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import api from '../api';
 
-/**
- * Safely extracts user role from token or localStorage.
- */
 const getUserRole = () => {
   const token = localStorage.getItem('token');
   if (!token) return null;
-
   try {
     const payloadBase64 = token.split('.')[1];
     if (payloadBase64) {
@@ -31,10 +27,7 @@ const getUserRole = () => {
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  
-  // Data States
-  const [allTickets, setAllTickets] = useState([]); // Original data from API
-  const [tickets, setTickets] = useState([]);       // Filtered display data
+  const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // Search and Filter States
@@ -45,66 +38,39 @@ export default function Dashboard() {
   const userRole = getUserRole();
   const isAdminOrSupport = userRole === 'admin' || userRole === 'support';
 
-  // 1. Fetch ALL tickets ONLY ONCE when the component mounts
-  useEffect(() => {
-    const fetchInitialTickets = async () => {
-      try {
-        // We MUST use /tickets/search as /tickets does not exist in FastAPI
-        const response = await api.get('/tickets/search');
-        const rawData = response.data?.tickets || response.data || [];
-        const ticketsList = Array.isArray(rawData) ? rawData : [];
-        
-        setAllTickets(ticketsList);
-        setTickets(ticketsList);
-      } catch (error) {
-        console.error("Fetch Error:", error);
-        toast.error('خطا در ارتباط با سرور برای دریافت بلیت‌ها');
-      } finally {
-        setLoading(false);
+  // 🔴 CONNECT TO ELASTICSEARCH: Fetch from backend API
+  const fetchTicketsFromES = async () => {
+    setLoading(true);
+    try {
+      const params = {};
+      if (searchQuery.trim()) params.q = searchQuery.trim();
+      if (selectedSport !== 'all') params.sport_type = selectedSport;
+      if (venueFilter.trim()) params.venue = venueFilter.trim();
+
+      // Sending request directly to our powerful ElasticSearch API
+      const response = await api.get('/tickets/search', { params });
+      const data = response.data?.tickets || response.data || [];
+      setTickets(Array.isArray(data) ? data : []);
+      
+    } catch (error) {
+      // Ignore 429 Too Many Requests in console to keep UI clean
+      if (error.response?.status !== 429) {
+        console.error("ES Search Error:", error);
+        toast.error('خطا در جستجوی هوشمند بلیت‌ها');
       }
-    };
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    fetchInitialTickets();
-  }, []);
-
-  // 2. Instant Local Filtering (Bypasses 429 Rate Limits completely!)
+  // 🔴 SMART DEBOUNCE: Wait 600ms after user stops typing before asking backend
   useEffect(() => {
-    let filteredList = [...allTickets];
-
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      filteredList = filteredList.filter((t) => {
-        const home = (t.home_team || '').toLowerCase();
-        const away = (t.away_team || '').toLowerCase();
-        const title = (t.title || '').toLowerCase();
-        const venue = (t.venue_name || t.venue || t.location_name || '')
-          .toLowerCase();
-          
-        return (
-          home.includes(q) || 
-          away.includes(q) || 
-          title.includes(q) || 
-          venue.includes(q)
-        );
-      });
-    }
-
-    if (selectedSport !== 'all') {
-      filteredList = filteredList.filter(
-        (t) => t.sport_type === selectedSport
-      );
-    }
-
-    if (venueFilter.trim()) {
-      const v = venueFilter.toLowerCase();
-      filteredList = filteredList.filter((t) => 
-        (t.venue_name || t.venue || t.location_name || '').toLowerCase()
-        .includes(v)
-      );
-    }
-
-    setTickets(filteredList);
-  }, [searchQuery, selectedSport, venueFilter, allTickets]);
+    const timer = setTimeout(() => {
+      fetchTicketsFromES();
+    }, 600);
+    
+    return () => clearTimeout(timer);
+  }, [searchQuery, selectedSport, venueFilter]);
 
   const handleClearFilters = () => {
     setSearchQuery('');
@@ -163,7 +129,7 @@ export default function Dashboard() {
               </span>
               <input
                 type="text"
-                placeholder="جستجوی تیم، مسابقه یا ورزشگاه..."
+                placeholder="جستجوی هوشمند تیم، مسابقه یا ورزشگاه (با پشتیبانی از غلط املایی)..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pr-10 pl-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
@@ -210,7 +176,7 @@ export default function Dashboard() {
         {/* Tickets Results Grid */}
         {loading ? (
           <div className="text-center py-20 text-gray-500 font-bold animate-pulse">
-            در حال دریافت اطلاعات از سرور...
+            در حال جستجو در پایگاه داده ElasticSearch...
           </div>
         ) : tickets.length === 0 ? (
           <div className="bg-white rounded-2xl p-12 text-center border border-dashed border-gray-300">
