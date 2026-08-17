@@ -11,9 +11,10 @@ _A fully normalized relational database and a raw-SQL FastAPI backend for a high
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.111.0-009688?style=for-the-badge&logo=fastapi&logoColor=white)](#phase-3)
 [![Redis](https://img.shields.io/badge/Redis-5.0.6-DC382D?style=for-the-badge&logo=redis&logoColor=white)](#phase-3)
 [![Celery](https://img.shields.io/badge/Celery-Task%20Queue-37814A?style=for-the-badge)](#phase-3)
+[![React](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black)](#phase-4)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=for-the-badge&logo=docker&logoColor=white)](docker-compose.yml)
 [![CI](https://img.shields.io/github/actions/workflow/status/MohammafAfra83/SportsTicketPlatform/ci.yml?branch=main&style=for-the-badge&label=CI&logo=githubactions&logoColor=white)](.github/workflows/ci.yml)
-[![Phase](https://img.shields.io/badge/Current%20Phase-3%20of%204-orange?style=for-the-badge)](#-project-status--roadmap)
+[![Phase](https://img.shields.io/badge/Current%20Phase-4%20of%204%20(In%20Progress)-orange?style=for-the-badge)](#-project-status--roadmap)
 [![License](https://img.shields.io/badge/License-Academic%20Project-lightgrey?style=for-the-badge)](#-author--license)
 
 [Project Status](#-project-status--roadmap) •
@@ -23,6 +24,7 @@ _A fully normalized relational database and a raw-SQL FastAPI backend for a high
 [Data Dictionary](#-data-dictionary) •
 [Phase 2](#phase-2) •
 [Phase 3](#phase-3) •
+[Phase 4](#phase-4) •
 [CI/CD](#-cicd-pipeline) •
 [Getting Started](#-getting-started) •
 [Upcoming Phases](#-project-roadmap--upcoming-phases)
@@ -49,7 +51,9 @@ This is a **4-phase project**. This README grows **incrementally** — each phas
 | **1** | Database Design — ER Diagram & Schema (3NF)                | ✅ **Complete** |
 | **2** | Data Seeding, Analytical Queries & Stored Procedures       | ✅ **Complete** |
 | **3** | Backend Implementation — REST API (No ORM) & Redis Caching | ✅ **Complete** |
-| **4** | Client Application & ElasticSearch Search Engine           |   ⏳ Planned    |
+| **4** | Client Application & ElasticSearch Search Engine           | 🔶 **In Progress** |
+
+> 🔶 **Phase 4 status detail:** the client application (a React + Vite SPA covering auth, ticket search, reservations, payments, a user panel, and an admin console) is implemented and documented in the [Phase 4](#phase-4) section below. The ElasticSearch indexing/sync layer on the backend side of this phase was not part of the files reviewed for that section and remains unverified — see [Phase 4 → Known Implementation Notes](#phase-4) for the full breakdown.
 
 **🌟 Selected Bonus (Extra-Credit) Phase:**
 
@@ -73,7 +77,7 @@ This is a **4-phase project**. This README grows **incrementally** — each phas
 User Registration → Browse Tickets → Create Reservation → Complete Payment → (Optional) Support Report
 ```
 
-The project is delivered across **4 phases** — database design, data/query layer, backend API, and client + search engine — with Dockerization as a separate, cross-phase bonus. As of **Phase 3**, the project delivers a fully normalized **3NF** PostgreSQL schema, a complete seed dataset, a 22-query analytical/maintenance layer, 8 reusable PL/pgSQL functions, a two-tier indexing strategy, and a full **FastAPI** REST backend — raw SQL (no ORM), JWT auth, Redis caching/queues, and Celery background jobs — all fully containerized and CI-verified end-to-end.
+The project is delivered across **4 phases** — database design, data/query layer, backend API, and client + search engine — with Dockerization as a separate, cross-phase bonus. As of **Phase 3**, the project delivers a fully normalized **3NF** PostgreSQL schema, a complete seed dataset, a 22-query analytical/maintenance layer, 8 reusable PL/pgSQL functions, a two-tier indexing strategy, and a full **FastAPI** REST backend — raw SQL (no ORM), JWT auth, Redis caching/queues, and Celery background jobs — all fully containerized and CI-verified end-to-end. **Phase 4** adds a React + Vite single-page client covering the full user journey — auth, search, reservation, payment, and support — plus an admin console; the planned ElasticSearch search-backend migration for this phase has not yet been verified against source (see [Phase 4](#phase-4)).
 
 |                            |                                                                            |
 | -------------------------- | -------------------------------------------------------------------------- |
@@ -82,6 +86,7 @@ The project is delivered across **4 phases** — database design, data/query lay
 | 🏟️ **Domain**              | Sports Event Ticketing (Football · Volleyball · Basketball)                |
 | 🏗️ **Architecture**        | Domain-Driven Partitioning (base ticket + sport-specific extension tables) |
 | ⚡ **Backend**              | FastAPI, raw SQL via pooled `psycopg2` (no ORM)                            |
+| 🖥️ **Client**              | React 19 + Vite SPA, Tailwind CSS (Phase 4)                                |
 | 🧠 **Cache / Queue**       | Redis (cache-aside search, OTPs, waitlists, idempotency) + Celery workers  |
 | 🔑 **Auth**                | JWT (`HS256`) + `bcrypt` password hashing                                  |
 | 🐳 **Containerization**    | Docker Compose — one command for the full stack (DB, Redis, API, worker)   |
@@ -136,14 +141,39 @@ SportsTicketPlatform/
 │   │   ├── procedures.sql                 # 8 PL/pgSQL stored functions
 │   │   └── queries.sql                    # 22 analytical & maintenance queries
 │   └── init.sh                            # 5-step automated bootstrap (run inside the container)
+├── frontend/
+│   ├── Dockerfile                         # Multi-stage build (node → nginx), SPA fallback routing
+│   ├── index.html                         # lang="fa" dir="rtl", mounts #root
+│   ├── package.json
+│   ├── vite.config.js
+│   ├── tailwind.config.js
+│   ├── postcss.config.js
+│   ├── eslint.config.js
+│   └── src/
+│       ├── main.jsx                       # ReactDOM root, wraps <App/> in StrictMode
+│       ├── App.jsx                        # Router, route guards (PrivateRoute/AdminRoute), route table
+│       ├── api.js                         # Single axios instance + bearer-token request interceptor
+│       ├── index.css                      # Tailwind directives + base styles
+│       ├── assets/                        # hero.png, react.svg, vite.svg
+│       └── pages/
+│           ├── Login.jsx                   # Login / signup / forgot-password (OTP-based, 3-in-1)
+│           ├── Dashboard.jsx                # Ticket search & browse (debounced, ElasticSearch-labeled)
+│           ├── TicketDetail.jsx             # Single ticket view + reserve action
+│           ├── PaymentGateway.jsx           # ✅ Current payment flow (routed)
+│           ├── Payment.jsx                  # ⚠️ Legacy payment flow (dead code, unrouted)
+│           ├── Profile.jsx                  # Booking history + account settings
+│           ├── Support.jsx                  # User-facing support tickets
+│           └── AdminDashboard.jsx           # Admin/support console (4 tabs)
 ├── docs/
 │   ├── Phase1/
 │   │   └── Phase1_Report.pdf              # Phase 1 technical & normalization report
 │   ├── Phase2/
 │   │   └── Phase2_Report.pdf              # Phase 2 technical implementation report
-│   └── Phase3/
-│       ├── Phase3_Backend_Implementation.md         # Full API reference, setup guide, testing & changelog
-│       └── Database_Sync_Cache_Invalidation_Strategy.md  # Cache-aside patterns & Redis key lifecycles
+│   ├── Phase3/
+│   │   ├── Phase3_Backend_Implementation.md         # Full API reference, setup guide, testing & changelog
+│   │   └── Database_Sync_Cache_Invalidation_Strategy.md  # Cache-aside patterns & Redis key lifecycles
+│   └── Phase4/
+│       └── Phase4_Frontend_Client_Implementation.md # Client architecture, routing, and full UI↔API contract
 ├── docker-compose.yml                     # 4 services: postgres_db, redis, api, celery_worker
 ├── .gitignore
 └── README.md                              # Main repository documentation
@@ -232,7 +262,7 @@ All tables strictly satisfy the criteria for **Third Normal Form (3NF)**:
 <div align="center">
 
 | Table                | Primary Key      | Foreign Key(s)                                               | 3NF Design Rationale                                                                           |
-| -------------------- | ---------------- | ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| -------------------- | ---------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ |
 | `users`              | `user_id`        | —                                                            | Unique email/phone; atomic name fields; decoupled auth credentials                             |
 | `tickets`            | `ticket_id`      | —                                                            | Generalized match metadata shared across all sports                                            |
 | `football_details`   | `ticket_id`      | → `tickets`                                                  | Isolates stadium, stand section, and row/seat details                                          |
@@ -248,11 +278,11 @@ All tables strictly satisfy the criteria for **Third Normal Form (3NF)**:
 
 ### 🔒 Integrity Constraints & Business Logic
 
-| Category                              | Implementation                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Value Constraints** (`CHECK`)       | Non-negative pricing (`price >= 0`), non-negative capacity (`remaining_capacity >= 0`), non-negative transaction amounts (`amount >= 0`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| **Temporal Logic**                    | Valid reservation time windows (`reserved_at < expires_at`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| **Domain Enumerations** (`ENUM`)      | `user_role`, `reservation_status`, `payment_status`, `sport_type_enum`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| Category                              | Implementation                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Value Constraints** (`CHECK`)       | Non-negative pricing (`price >= 0`), non-negative capacity (`remaining_capacity >= 0`), non-negative transaction amounts (`amount >= 0`)                                                                                                                                                                                                                                                                                                                                                                                       |
+| **Temporal Logic**                    | Valid reservation time windows (`reserved_at < expires_at`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| **Domain Enumerations** (`ENUM`)      | `user_role`, `reservation_status`, `payment_status`, `sport_type_enum`                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | **Referential Actions** (`ON DELETE`) | `CASCADE` — removes a ticket's extension row (`football_details` / `volleyball_details` / `basketball_details`) and any `reservations` when the owning `ticket` or `user` is deleted. `RESTRICT` — blocks deletion of any `user` or `reservation` that already has a `payments` record, protecting completed transactions from accidental loss. `SET NULL` — preserves `reports` when the referenced `ticket`/`reservation` is removed (`reports.ticket_id`, `reports.reservation_id`), and preserves a reservation's history when the cancelling support agent's account is removed (`reservations.cancelled_by_support_id`). |
 
 <br>
@@ -275,7 +305,7 @@ All tables strictly satisfy the criteria for **Third Normal Form (3NF)**:
 <br>
 
 | Entity               | Key Attributes                                                                                                                                          | Relationships                                                                                            | Target Cardinality                                                                              |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
 | `users`              | `user_id` (PK), `first_name`, `last_name`, `phone_number`, `email`, `password_hash`, `role`, `city`, `is_active`, `created_at`                          | Makes Reservation • Billed via Payment • Submits Report • Cancels Reservation (as support)               | 1:N → `reservations` • 1:N → `payments` • 1:N → `reports` • 1:N → `reservations` (as canceller) |
 | `tickets`            | `ticket_id` (PK), `home_team`, `away_team`, `sport_type`, `ticket_tier`, `organizer`, `venue_name`, `city`, `match_date`, `price`, `remaining_capacity` | Booked In • Has Football/Volleyball/Basketball Details • Referenced By Report                            | 1:N → `reservations` • 1:1 → each `*_details` • 1:N → `reports`                                 |
 | `football_details`   | `ticket_id` (PK/FK), `league_name`, `stadium_name`, `stand_section`, `row_number`, `seat_number`, `ticket_type`, `amenities`                            | Extension of Base Ticket                                                                                 | 1:1 → `tickets`                                                                                 |
@@ -315,7 +345,7 @@ All tables strictly satisfy the criteria for **Third Normal Form (3NF)**:
 ### 🌱 Seed Data (`seed.sql`)
 
 | Entity                                                           | Records Seeded | Notes                                               |
-| ---------------------------------------------------------------- | :------------: | --------------------------------------------------- |
+| ---------------------------------------------------------------- | :------------: | ---------------------------------------------------- |
 | `users`                                                          |       10       | 8 audience, 2 support                               |
 | `tickets`                                                        |       30       | 10 mixed + 6 football + 7 volleyball + 7 basketball |
 | `football_details` / `volleyball_details` / `basketball_details` |    10 each     | One row per ticket of that sport                    |
@@ -332,7 +362,7 @@ All tables strictly satisfy the criteria for **Third Normal Form (3NF)**:
 The query suite is split into two parts: safe, read-only analytics, and explicit, controlled data maintenance.
 
 | Category                    |       Query # (of 22)        | Representative Example                                                   |
-| --------------------------- | :--------------------------: | ------------------------------------------------------------------------ |
+| --------------------------- | :---------------------------: | -------------------------------------------------------------------------- |
 | User & Purchase Behaviour   | 1, 2, 3, 4, 6, 8, 12, 13, 14 | Users who never reserved a ticket; spenders above the platform average   |
 | Ticket & Sales Analytics    |   5, 7, 9, 10, 16, + Bonus   | 2nd best-selling ticket via `DENSE_RANK()`; index-optimized match lookup |
 | Time-Windowed Reporting     |              15              | Today's purchases grouped by hour                                        |
@@ -351,15 +381,15 @@ The query suite is split into two parts: safe, read-only analytics, and explicit
 ### ⚙️ Stored Functions & Procedures (`procedures.sql`) — 8 Total
 
 |  #  | Function                                  | Key Parameter(s)                | Purpose                                                      |
-| :-: | ----------------------------------------- | ------------------------------- | ------------------------------------------------------------ |
+| :-: | ------------------------------------------ | -------------------------------- | -------------------------------------------------------------- |
 |  1  | `get_user_paid_tickets`                   | `p_contact VARCHAR`             | Paid tickets for a user, by phone or e-mail                  |
 |  2  | `get_cancelled_reservations_by_support`   | `p_support_contact VARCHAR`     | Cancellations handled by one support agent                   |
 |  3  | `get_tickets_by_city`                     | `p_city VARCHAR`                | Paid tickets sold in a given city                            |
 |  4  | `search_tickets_by_keyword`               | `p_keyword VARCHAR`             | Free-text search across team, venue, spectator & league name |
 |  5  | `get_co_citizens_purchases`               | `p_contact VARCHAR`             | Purchases made by users from the same city                   |
 |  6  | `get_top_buyers_after_date`               | `p_date TIMESTAMP, p_limit INT` | Top-N buyers since a given date                              |
-|  7  | `get_cancelled_tickets_by_sport`          | `p_sport_type sport_type_enum`  | Cancelled reservations for one sport, newest first           |
-|  8  | `get_users_with_most_reports_by_category` | `p_category VARCHAR`            | Users most frequently reported in a given category           |
+|  7  | `get_cancelled_tickets_by_sport`          | `p_sport_type sport_type_enum`  | Cancelled reservations for one sport, newest first            |
+|  8  | `get_users_with_most_reports_by_category` | `p_category VARCHAR`            | Users most frequently reported in a given category            |
 
 > 🔎 **`search_tickets_by_keyword`** is the most structurally complex function: it `LEFT JOIN`s across **six tables** — `tickets`, `reservations`, `users`, `football_details`, `volleyball_details`, `basketball_details` — so a ticket with no reservation yet, or without a matching sport-specific row, is still returned instead of being silently excluded by an inner join.
 
@@ -372,7 +402,7 @@ The query suite is split into two parts: safe, read-only analytics, and explicit
 11 indexes now cover the schema — 7 conventional B-Tree indexes plus 4 GIN Trigram indexes (via `CREATE EXTENSION pg_trgm`) for fast partial-text `ILIKE` search:
 
 | Type        | Index                          | Target Column(s)                | Optimizes                            |
-| ----------- | ------------------------------ | ------------------------------- | ------------------------------------ |
+| ----------- | -------------------------------- | ---------------------------------- | --------------------------------------- |
 | B-Tree      | `idx_tickets_sport_city`       | `tickets(sport_type, city)`     | Combined sport + city filtering      |
 | B-Tree      | `idx_tickets_match_date`       | `tickets(match_date ASC)`       | Chronological upcoming-match listing |
 | B-Tree      | `idx_reservations_user_status` | `reservations(user_id, status)` | Per-user reservation status lookups  |
@@ -570,6 +600,101 @@ Caught by reading the source directly rather than relying on prior notes. The fu
 
 ---
 
+<a id="phase-4"></a>
+
+## 🏛️ Phase 4 — Client Application & ElasticSearch Search Engine
+
+> **Status: 🔶 In Progress** — The client application is delivered: a React + Vite single-page app covering login/signup/password-reset, ticket search & filtering, ticket details & reservation, a payment gateway, a user panel (booking history, account settings, support tickets), and an admin/support console. The ElasticSearch indexing/sync layer on the backend side of this phase was **not** part of the files reviewed for this section — everything below reflects only what could be verified by reading the client's own source.
+
+**Goal:** Ship a client UI and migrate ticket search from SQL to **ElasticSearch** for improved performance.
+
+### ✅ Deliverables Checklist
+
+- [x] Core client screens: login, ticket search & filtering, ticket details, reservation & payment flow, and a user panel (booking history + report submission) — all implemented and verified directly from source
+- [x] Extra beyond the original spec: a full admin/support console (dashboard stats, ticket & user tables, ticket-reply workflow)
+- [x] Standalone containerization for the client — multi-stage `Dockerfile` (Node build → Nginx serve, with SPA fallback routing)
+- [x] Documentation of the UI–API interaction — this section, plus the full endpoint-by-endpoint contract in [`docs/Phase4/Phase4_Frontend_Client_Implementation.md`](docs/Phase4/Phase4_Frontend_Client_Implementation.md)
+- [ ] ElasticSearch indexing for tickets, with two-way sync between the SQL database and ElasticSearch on ticket create/update/delete — **not verified**; no backend source for this phase was reviewed
+- [ ] Confirmation that ticket-search traffic is actually routed to ElasticSearch rather than the primary database — the client calls a generic `GET /tickets/search`, agnostic of what backs it server-side; UI copy and code comments reference "ElasticSearch," but this hasn't been cross-checked against backend source
+- [ ] 🌟 Bonus: ElasticSearch autocomplete/smart filtering — not present in the reviewed client (search is a plain debounced query, no autocomplete suggestions)
+- [ ] 🌟 Bonus: native mobile client — not delivered; this is a responsive web SPA
+
+### 🧱 Tech Stack
+
+| Layer | Choice |
+|---|---|
+| **Framework** | React `19.2.8` |
+| **Build tool** | Vite `8.2.0` (`@vitejs/plugin-react`) |
+| **Routing** | `react-router-dom 7.18.2` |
+| **HTTP client** | `axios 1.19.0` — one shared instance with a bearer-token request interceptor |
+| **Styling** | Tailwind CSS `3.4.19` + PostCSS/Autoprefixer |
+| **Notifications** | `react-hot-toast` |
+| **Icons** | `lucide-react` |
+| **Linting** | ESLint (flat config) + `eslint-plugin-react-hooks`/`react-refresh` |
+| **State management** | None — local `useState`/`useEffect` per page, no shared cache |
+
+### 🖼️ Client Screens & Their API Calls
+
+| Page | Route | Purpose | Key endpoint(s) |
+|---|---|---|---|
+| `Login.jsx` | `/` | Login, OTP-based signup, OTP-based password reset (one component, 3 modes) | `POST /auth/login`, `/auth/otp`, `/auth/signup`, `/auth/reset-password` |
+| `Dashboard.jsx` | `/dashboard` | Debounced (600ms) ticket search with sport/venue filters | `GET /tickets/search` |
+| `TicketDetail.jsx` | `/tickets/:id` | Ticket detail + create a 1-ticket reservation | `GET /tickets/:id`, `POST /reservations/` |
+| `PaymentGateway.jsx` | `/payment/:reservationId` | 15-minute countdown checkout | `POST /payments/` |
+| `Profile.jsx` | `/profile` | Booking history (with per-item enrichment), cancellations, account settings | `GET/PUT /user/profile`, `GET /user/bookings`, `POST /payments/cancel` |
+| `Support.jsx` | `/support` | Submit & review the user's own support tickets | `GET/POST /reports/` |
+| `AdminDashboard.jsx` | `/admin` | 4-tab console: overview stats, tickets (read-only), users (read-only), report replies | `GET /admin/dashboard-stats`, `/admin/reports`, `/admin/users`, `/admin/tickets`, `PUT /admin/reports/:id/reply` |
+
+Routing is guarded by two wrappers in `App.jsx`: **`PrivateRoute`** (requires a token in `localStorage`) and **`AdminRoute`** (additionally decodes the JWT payload client-side — no signature check — to gate `admin`/`support` roles). This is a UI convenience only; real authorization enforcement lives server-side, per the Phase 3 backend's own role re-check against the database.
+
+<details>
+<summary><strong>Click to expand the full client → API contract (18 calls)</strong></summary>
+
+| Method & Path | Called from | Request body / params |
+|---|---|---|
+| `POST /auth/login` | Login.jsx | form-urlencoded `username`, `password` |
+| `POST /auth/otp` | Login.jsx (signup + forgot) | `{ phone_number }` |
+| `POST /auth/signup` | Login.jsx | `{ phone_number, otp_code, first_name, last_name, email, city, password }` |
+| `POST /auth/reset-password` | Login.jsx | `{ phone_number, otp_code, new_password }` |
+| `GET /tickets/search` | Dashboard.jsx | query: `q?`, `sport_type?`, `venue?` |
+| `GET /tickets/:id` | TicketDetail.jsx, Profile.jsx | — |
+| `POST /reservations/` | TicketDetail.jsx | `{ ticket_id, quantity: 1 }` |
+| `POST /payments/` | PaymentGateway.jsx | `{ reservation_id, payment_method: 'online_gateway' }` |
+| `POST /payments/cancel` | Profile.jsx | `{ reservation_id }` |
+| `GET /user/profile` | Profile.jsx | — |
+| `PUT /user/profile` | Profile.jsx | `{ first_name, last_name, email, city }` |
+| `GET /user/bookings` | Profile.jsx | — |
+| `GET /reports/` | Support.jsx | — |
+| `POST /reports/` | Support.jsx | `{ category, report_text, reservation_id: null }` |
+| `GET /admin/dashboard-stats` | AdminDashboard.jsx | — |
+| `GET /admin/reports` | AdminDashboard.jsx | — |
+| `PUT /admin/reports/:id/reply` | AdminDashboard.jsx | `{ admin_response, status: 'resolved' }` |
+| `GET /admin/users`, `GET /admin/tickets` | AdminDashboard.jsx | — |
+
+Full request/response shapes, per-field notes, and the reasoning behind every entry above are in [`docs/Phase4/Phase4_Frontend_Client_Implementation.md` §7](docs/Phase4/Phase4_Frontend_Client_Implementation.md#7-complete-client--api-contract).
+
+</details>
+
+### 🐳 Containerization
+
+The client ships its own multi-stage `Dockerfile` — a `node:20-alpine` build stage running `npm run build`, copied into an `nginx:alpine` stage with an inline SPA-fallback config (`try_files $uri $uri/ /index.html;`) on port 80. It is **not yet wired into the root `docker-compose.yml`**, so it currently has to be built and run as a standalone image — see [Running the Phase 4 Client](#-getting-started) below.
+
+### 📝 Known Implementation Notes & Open Items
+
+Caught by reading the client source directly. The full write-up, including request/response field-by-field notes, is in [`docs/Phase4/Phase4_Frontend_Client_Implementation.md` §8](docs/Phase4/Phase4_Frontend_Client_Implementation.md#8-known-gaps--discrepancies-frontend-side) — highlights:
+
+- **No `Idempotency-Key` header is sent on `POST /payments/`**, despite the Phase 3 backend documenting that endpoint as idempotency-key-gated. Not confirmed whether the backend for this phase still enforces it — needs a cross-check once its source is available.
+- **No QR-code / digital ticket is rendered anywhere in the client**, even though the payment endpoint is documented (Phase 3) to return one on success.
+- **Zero client integration with the sold-out waitlist endpoint** (`POST /api/reservations/waitlist`) — the Reserve button is simply disabled when capacity is 0, with no "join waitlist" alternative offered.
+- **`reports.reservation_id` is always sent as `null`** from the Support form, even though `AdminDashboard.jsx` is written to display it when present — the field exists in the contract but the client never populates it.
+- **A legacy `Payment.jsx` component still exists but is unrouted dead code**, superseded by `PaymentGateway.jsx` (different timer length, different request payload).
+- **The API base URL is hardcoded** in `src/api.js` (`http://localhost:8000/api`), not environment-driven — retargeting the client requires a source edit and rebuild, not just an env var.
+- **Whether `GET /tickets/search` is actually ElasticSearch-backed is unverified.** The client's UI copy and code comments reference "ElasticSearch," but nothing in the client itself proves what's on the other side of that endpoint — this is the single biggest open item for calling this phase complete.
+
+📄 **Full technical write-up** (routing, auth handling, every page's data flow, the complete client↔API contract, and all discrepancies): [`docs/Phase4/Phase4_Frontend_Client_Implementation.md`](docs/Phase4/Phase4_Frontend_Client_Implementation.md)
+
+---
+
 ## 🔁 CI/CD Pipeline
 
 Every push to `main` or `phase3-backend-implementation`, and every pull request into `main`, triggers the workflow defined in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — now named **"Phase 3 CI – Full Stack Verification"** and rebuilt to exercise the whole application, not just the database tier:
@@ -577,7 +702,7 @@ Every push to `main` or `phase3-backend-implementation`, and every pull request 
 <div align="center">
 
 | Step | Action                                                                                      |
-| :--: | ------------------------------------------------------------------------------------------- |
+| :--: | ---------------------------------------------------------------------------------------------- |
 |  1️⃣  | Checkout repository code                                                                    |
 |  2️⃣  | Write a CI-only `.env` file (test JWT secret, Compose-network hostnames)                    |
 |  3️⃣  | `chmod +x database/init.sh`                                                                 |
@@ -645,29 +770,46 @@ psql -d sports_ticket_db -f database/scripts/queries.sql
 
 > ℹ️ The `pg_trgm` extension is enabled automatically by `indexes.sql` to support fast fuzzy text search on `tickets.venue_name`, `tickets.home_team`, `tickets.away_team`, `users.first_name`/`last_name` — and, as of Phase 3, the ticket-search "did you mean" fallback in the API (see [Phase 3](#phase-3)).
 
+### 🖥️ Running the Phase 4 Client
+
+The client is a separate app under `frontend/` and isn't yet part of `docker-compose.yml`, so start the backend first (Option 1 above), then run the client with either of the following:
+
+```bash
+# Local dev server
+cd frontend
+npm install
+npm run dev          # → http://localhost:5173 by default
+
+# — or — standalone production container
+cd frontend
+docker build -t sports-ticket-frontend .
+docker run -p 8080:80 sports-ticket-frontend   # → http://localhost:8080
+```
+
+> ⚠️ The client's API base URL is hardcoded to `http://localhost:8000/api` in `src/api.js` (see [Phase 4](#phase-4)) — make sure the backend from Option 1 is already running on that port, and expect to edit that file and rebuild if you need to point the client anywhere else.
+
 ---
 
 ## 🗺 Project Roadmap — Upcoming Phases
 
-_This section previews the remaining phase per the project specification. It will be expanded into its own full `## 🏛️ Phase 4` section — with real deliverables, code, and documentation — once completed. (Phase 3 was previewed here too, until it was completed — see the full [Phase 3](#phase-3) section above.)_
+_This section now tracks only what's still outstanding for Phase 4 — the client application itself is complete and documented above in the full [Phase 4](#phase-4) section. (Phase 3 was previewed here too, until it was completed — the same pattern applies to Phase 4's remaining items below.)_
 
-### 🏅 Phase 4 — Client Application & ElasticSearch
+### 🏅 Phase 4 — Remaining Work: ElasticSearch Migration
 
-**Status:** ⏳ Planned
+**Status:** ⏳ Planned / Unverified — client ✅, search backend ⏳
 
-**Goal:** Ship a client UI and migrate ticket search from SQL to **ElasticSearch** for improved performance.
+**Goal:** Migrate ticket search from SQL to **ElasticSearch** for improved performance, with the already-delivered client as the consumer of that search endpoint.
 
 - Set up ElasticSearch indexing for tickets, with two-way sync between the SQL database and ElasticSearch on ticket create/update/delete.
-- Route ticket-search traffic to ElasticSearch instead of the primary database.
-- Build core client screens: login, ticket search & filtering, ticket details, reservation & payment flow, and a user panel (booking history + report submission).
-- **Deliverable:** Client-side source code (web or mobile), ElasticSearch connection/indexing scripts, and documentation of the UI–API interaction.
-- 🌟 **Bonus (optional):** Autocomplete/smart filtering in ElasticSearch, or a native mobile client.
+- Confirm `GET /tickets/search` is actually routed to ElasticSearch rather than the primary database (or Phase 3's `pg_trgm` fallback) — the client itself is agnostic to what backs this endpoint, so this can only be verified from backend source.
+- **Deliverable:** ElasticSearch connection/indexing scripts, and confirmation of the search migration in `docs/Phase4/Phase4_Frontend_Client_Implementation.md`.
+- 🌟 **Bonus (still open):** Autocomplete/smart filtering in ElasticSearch, or a native mobile client.
 
 ### 🐳 Cross-Phase Bonus — Full-Stack Dockerization
 
-**Status:** ✅ Fully Implemented — **database tier (Phase 2)** and **backend API + Redis + Celery worker (Phase 3)** are all containerized
+**Status:** ✅ Fully Implemented for the backend — **database tier (Phase 2)** and **backend API + Redis + Celery worker (Phase 3)** are all containerized via `docker-compose.yml`. The **Phase 4 client** has its own standalone multi-stage `Dockerfile` (Node build → Nginx) but has not yet been merged into that same Compose file.
 
-_Not one of the 4 core phases —_ as an additional, project-wide extra-credit feature, the full stack is **containerized with Docker / Docker Compose** for one-command local setup and reproducible deployment. As of Phase 3, all four services — `postgres_db`, `redis`, `api`, and `celery_worker` — build and start with a single `docker compose up --build -d`, and the CI pipeline verifies the entire stack (not just the database) on every push. Only **Phase 4**'s client application and ElasticSearch layer remain outside `docker-compose.yml`.
+_Not one of the 4 core phases —_ as an additional, project-wide extra-credit feature, the full stack is **containerized with Docker / Docker Compose** for one-command local setup and reproducible deployment. As of Phase 3, all four backend services — `postgres_db`, `redis`, `api`, and `celery_worker` — build and start with a single `docker compose up --build -d`, and the CI pipeline verifies that stack (not just the database) on every push. The Phase 4 client currently has to be built/run separately (see [Running the Phase 4 Client](#-getting-started)); only the ElasticSearch layer for this phase remains completely undocumented in this repository.
 
 ---
 
