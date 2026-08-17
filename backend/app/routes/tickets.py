@@ -1,4 +1,4 @@
-# 🔴 Added Request
+import json
 from fastapi import (
     APIRouter,
     HTTPException,
@@ -7,267 +7,161 @@ from fastapi import (
     status,
     Request,
 )
-import json
 from app.database import get_db_cursor
 from app.redis_client import redis_client
-from app.schemas.tickets import TicketDetailResponse, TicketListResponse
-
-# 🔴 Imported limiter
 from app.rate_limiter import limiter
+
+# Import Elasticsearch client
+from app.es_client import es, INDEX_NAME
 
 router = APIRouter(prefix="/api/tickets", tags=["Tickets"])
 
 
 @router.get(
     "/search",
-    response_model=TicketListResponse,
+    response_model=dict,
     status_code=status.HTTP_200_OK,
-    summary="Advanced Ticket Search with Caching & Fuzzy",
+    summary="ElasticSearch Ticket Search with Surge Pricing & Fuzzy Match",
 )
-@limiter.limit("20/minute")  # 🔴 Safety guard: Maximum 20 times per minute
+@limiter.limit("100/minute")
 def search_tickets(
-    request: Request,  # 🔴 Safety guard: Maximum 20 times per minute
-    sport_type: str | None = Query(
-        None,
-        description="Sport type: football, volleyball, basketball",
-    ),
+    request: Request,
+    q: str | None = Query(None, description="General search query"),
+    sport_type: str | None = Query(None, description="Sport type"),
     venue: str | None = Query(None, description="Venue/stadium name"),
-    min_price: float | None = Query(
-        None,
-        ge=0,
-        description="Minimum ticket price",
-    ),
-    max_price: float | None = Query(
-        None,
-        ge=0,
-        description="Maximum ticket price",
-    ),
-    team_name: str | None = Query(
-        None,
-        description="Team name (home or away)",
-    ),
-    ticket_tier: str | None = Query(
-        None, description="Ticket tier: VIP, Normal, Premium"
-    ),
-    start_date: str | None = Query(
-        None,
-        description="Start date (YYYY-MM-DD)",
-    ),
+    min_price: float | None = Query(None, ge=0),
+    max_price: float | None = Query(None, ge=0),
 ):
-    cache_key = (
-        f"tickets:search:{sport_type or 'all'}:{venue or 'all'}:"
-        f"{min_price or '0'}:{max_price or 'inf'}:"
-        f"{team_name or 'all'}:{ticket_tier or 'all'}:"
-        f"{start_date or 'all'}"
-    )
-    cached_data = redis_client.get(cache_key)
+    try:
+        must_clauses = [{"match": {"is_active": True}}]
 
-    if cached_data:
-        parsed_cache = json.loads(cached_data)
-        return {
-            "source": "cache (Redis) ⚡",
-            "count": parsed_cache.get("count", 0),
-            "tickets": parsed_cache.get("tickets", []),
-            "suggestions": parsed_cache.get("suggestions", []),
+        if q and q.strip():
+            must_clauses.append({
+                "multi_match": {
+                    "query": q.strip(),
+                    "fields": [
+                        "home_team^3",
+                        "away_team^3",
+                        "title^2",
+                        "venue_name",
+                    ],
+                    "fuzziness": "AUTO",
+                }
+            })
+
+        if sport_type and sport_type.lower() != "all":
+            must_clauses.append({
+                "term": {"sport_type": sport_type.lower()}
+            })
+
+        if venue and venue.strip():
+            must_clauses.append({
+                "match": {
+                    "venue_name": {
+                        "query": venue.strip(),
+                        "fuzziness": "AUTO",
+                    }
+                }
+            })
+
+        if min_price is not None or max_price is not None:
+            price_range = {}
+            if min_price is not None:
+                price_range["gte"] = min_price
+            if max_price is not None:
+                price_range["lte"] = max_price
+            must_clauses.append({"range": {"price": price_range}})
+
+        es_query = {
+            "query": {"bool": {"must": must_clauses}},
+            "sort": [{"match_date": {"order": "desc"}}],
+            "size": 50,
         }
 
-    try:
-        with get_db_cursor() as cursor:
-            # ==========================================
-            # STAGE 1: Standard Search (Exact / ILIKE)
-            # ==========================================
-            base_select = """
-                SELECT
-                    ticket_id, sport_type, home_team, away_team,
-                    venue_name, city, ticket_tier, organizer,
-                    match_date, price, remaining_capacity, is_active
-                FROM tickets
-                WHERE is_active = TRUE
-            """
-            query = base_select
-            params = []
+        response = es.search(index=INDEX_NAME, body=es_query)
+        hits = response["hits"]["hits"]
 
-            if sport_type:
-                query += " AND sport_type = %s"
-                params.append(sport_type)
-            if venue:
-                query += " AND venue_name ILIKE %s"
-                params.append(f"%{venue}%")
-            if min_price is not None:
-                query += " AND price >= %s"
-                params.append(min_price)
-            if max_price is not None:
-                query += " AND price <= %s"
-                params.append(max_price)
-            if team_name:
-                query += " AND (home_team ILIKE %s OR away_team ILIKE %s)"
-                params.append(f"%{team_name}%")
-                params.append(f"%{team_name}%")
-            if ticket_tier:
-                query += " AND ticket_tier ILIKE %s"
-                params.append(f"%{ticket_tier}%")
-            if start_date:
-                query += " AND match_date >= %s::timestamp"
-                params.append(start_date)
+        results = []
+        for hit in hits:
+            doc = hit["_source"]
+            doc["ticket_id"] = hit.get("_id", doc.get("ticket_id"))
+            
+            base_price = float(doc.get("price", 0))
+            cap = int(doc.get("remaining_capacity", 0))
+            
+            if 0 < cap < 1000:
+                doc["price"] = round(base_price * 1.15, 2)
+                doc["is_surge_pricing"] = True
+            else:
+                doc["price"] = base_price
+                doc["is_surge_pricing"] = False
 
-            query += " ORDER BY match_date ASC;"
-            cursor.execute(query, tuple(params))
+            results.append(doc)
 
-            def format_ticket(row):
-                item = dict(row)
-                item["match_date"] = item["match_date"].isoformat()
-                item["title"] = f"{item['home_team']} vs {item['away_team']}"
-
-                # 🔴 Dynamic Surge Pricing Logic
-                base_price = float(item["price"])
-                remaining = int(item["remaining_capacity"])
-                total_capacity = 5000
-
-                if remaining > 0 and remaining < (total_capacity * 0.20):
-                    surge_price = base_price * 1.15
-                    item["price"] = round(surge_price, 2)
-                    item["is_surge_pricing"] = True
-                else:
-                    item["price"] = base_price
-                    item["is_surge_pricing"] = False
-
-                return item
-
-            tickets_list = [format_ticket(row) for row in cursor.fetchall()]
-            suggestions_list = []
-
-            # ==========================================
-            # STAGE 2: Fuzzy Search Fallback
-            # ==========================================
-            if not tickets_list and (team_name or venue):
-                fuzzy_query = base_select
-                fuzzy_params = []
-
-                if team_name:
-                    fuzzy_query += (
-                        " AND (home_team <-> %s < 0.6 OR "
-                        "away_team <-> %s < 0.6)"
-                    )
-                    fuzzy_params.extend([team_name, team_name])
-                    fuzzy_query += (
-                        " ORDER BY LEAST(home_team <-> %s, "
-                        "away_team <-> %s) ASC"
-                    )
-                    fuzzy_params.extend([team_name, team_name])
-                elif venue:
-                    fuzzy_query += " AND venue_name <-> %s < 0.6"
-                    fuzzy_params.append(venue)
-                    fuzzy_query += " ORDER BY venue_name <-> %s ASC"
-                    fuzzy_params.append(venue)
-
-                fuzzy_query += " LIMIT 3;"
-                cursor.execute(fuzzy_query, tuple(fuzzy_params))
-                suggestions_list = [
-                    format_ticket(row) for row in cursor.fetchall()
-                ]
-
-            response_data = {
-                "source": "database (PostgreSQL) 🐘",
-                "count": len(tickets_list),
-                "tickets": tickets_list,
-                "suggestions": suggestions_list,
-            }
-
-            redis_client.set(cache_key, json.dumps(response_data), ex=60)
-            return response_data
+        return {"tickets": results}
 
     except Exception as e:
-        detail = f"Database error: {str(e)}"
-        raise HTTPException(
-            status_code=500,
-            detail=detail,
-        )
+        print(f"ElasticSearch Search Error: {e}")
+        return {"tickets": []}
 
 
 @router.get(
     "/{ticket_id}",
-    response_model=TicketDetailResponse,
+    response_model=dict,
     status_code=status.HTTP_200_OK,
-    summary="Get ticket details with JOINs, COALESCE & Surge Pricing",
 )
-def get_ticket_details(
-    ticket_id: int = Path(..., gt=0, description="The ID of the ticket")
+@limiter.limit("60/minute")
+def get_ticket_detail(
+    request: Request,
+    ticket_id: int = Path(..., description="Ticket ID", gt=0),
 ):
+    cache_key = f"ticket_detail:{ticket_id}"
     try:
+        cached_data = redis_client.get(cache_key)
+        if cached_data:
+            return {"ticket": json.loads(cached_data)}
+            
         with get_db_cursor() as cursor:
+            # FIX: Simplified query based on Phase 2 schema optimization!
             query = """
-            SELECT t.*,
-                COALESCE(
-                    f.league_name,
-                    v.league_name,
-                    b.league_name
-                ) AS league_name,
-                COALESCE(
-                    f.stadium_name,
-                    v.hall_name,
-                    b.hall_name
-                ) AS facility_name,
-                COALESCE(
-                    f.stand_section,
-                    v.seat_section,
-                    b.seat_section
-                ) AS seat_section,
-                COALESCE(
-                    f.row_number,
-                    v.row_number,
-                    b.row_number
-                ) AS row_number,
-                COALESCE(
-                    f.seat_number,
-                    v.seat_number,
-                    b.seat_number
-                ) AS seat_number,
-                COALESCE(
-                    f.ticket_type,
-                    v.ticket_tier,
-                    b.ticket_tier
-                ) AS specific_ticket_tier,
-                COALESCE(
-                    f.amenities,
-                    v.amenities,
-                    b.amenities
-                ) AS amenities
-            FROM tickets t
-            LEFT JOIN football_details f ON t.ticket_id = f.ticket_id
-            LEFT JOIN volleyball_details v ON t.ticket_id = v.ticket_id
-            LEFT JOIN basketball_details b ON t.ticket_id = b.ticket_id
-            WHERE t.ticket_id = %s;
+            SELECT ticket_id, home_team, away_team, match_date, 
+                   sport_type, price, remaining_capacity, 
+                   is_active, venue_name
+            FROM tickets
+            WHERE ticket_id = %s;
             """
             cursor.execute(query, (ticket_id,))
             row = cursor.fetchone()
 
             if not row:
-                raise HTTPException(status_code=404, detail="Ticket not found")
+                raise HTTPException(
+                    status_code=404, detail="Ticket not found"
+                )
 
             item = dict(row)
-            item["match_date"] = item["match_date"].isoformat()
-            item["title"] = f"{item['home_team']} vs {item['away_team']}"
+            if item.get("match_date"):
+                item["match_date"] = item["match_date"].isoformat()
+            
+            # Reconstruct title directly
+            home = item.get("home_team") or "تیم ۱"
+            away = item.get("away_team") or "تیم ۲"
+            item["title"] = f"{home} vs {away}"
 
-            # 🔴 Dynamic Surge Pricing Logic for Detail View
             base_price = float(item["price"])
             remaining = int(item["remaining_capacity"])
-            total_capacity = 5000
 
-            if remaining > 0 and remaining < (total_capacity * 0.20):
-                surge_price = base_price * 1.15
-                item["price"] = round(surge_price, 2)
+            if 0 < remaining < 1000:
+                item["price"] = round(base_price * 1.15, 2)
                 item["is_surge_pricing"] = True
             else:
                 item["price"] = base_price
                 item["is_surge_pricing"] = False
 
-            return item
+            redis_client.setex(cache_key, 300, json.dumps(item))
+            
+            return {"ticket": item}
 
     except Exception as e:
         if isinstance(e, HTTPException):
             raise e
-        detail = f"Database error: {str(e)}"
-        raise HTTPException(
-            status_code=500,
-            detail=detail,
-        )
+        raise HTTPException(status_code=500, detail=str(e))

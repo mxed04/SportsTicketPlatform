@@ -4,17 +4,17 @@ services:
     container_name: sports_ticket_postgres
     restart: always
     environment:
-      POSTGRES_DB: sports_ticket_db
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: persianlord@0171
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-persianlord@0171}
+      POSTGRES_DB: ${DB_NAME:-sports_ticket_db}
     ports:
-      - "5433:5432"
+      - "${DB_PORT:-5433}:5432"
     volumes:
-      - ./database/scripts:/scripts
-      - ./database/init.sh:/docker-entrypoint-initdb.d/01-init.sh
       - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sh:/docker-entrypoint-initdb.d/01-init.sh
+      - ./database/scripts:/scripts
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d sports_ticket_db"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-sports_ticket_db}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -24,53 +24,66 @@ services:
     container_name: sports_ticket_redis
     restart: always
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.3
+    container_name: sports_ticket_elasticsearch
+    restart: always
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -q '\"status\":\"green\"\\|\"status\":\"yellow\"'"]
       interval: 10s
-      timeout: 5s
-      retries: 3
+      timeout: 10s
+      retries: 10
 
   api:
     build:
       context: ./backend
+      dockerfile: Dockerfile
     container_name: sports_ticket_api
     restart: always
+    env_file:
+      - .env
     ports:
-      - "8000:8000"
+      - "${PORT:-8000}:8000"
     depends_on:
       postgres_db:
         condition: service_healthy
       redis:
         condition: service_healthy
-    env_file:
-      - .env
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "python",
-          "-c",
-          "import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.settimeout(2); s.connect(('127.0.0.1', 8000)); s.close()",
-        ]
-      interval: 10s
-      timeout: 5s
-      retries: 3
+      elasticsearch:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
 
-  celery_worker:
+  # 🔴 NEW: Frontend Service Added Here
+  frontend:
     build:
-      context: ./backend
-    container_name: sports_ticket_celery
-    command: celery -A app.tasks.reservation_tasks.celery_app worker --loglevel=info
-    env_file:
-      - .env
-    depends_on:
-      postgres_db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: sports_ticket_frontend
     restart: always
+    ports:
+      - "5173:80"  # Mapping external 5173 to Nginx port 80
+    depends_on:
+      - api
 
 volumes:
   postgres_data:
-    driver: local
+  redis_data:
+  es_data:

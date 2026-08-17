@@ -1,6 +1,6 @@
-from pydantic import BaseModel, Field
-from typing import Literal
 from datetime import datetime
+from typing import Literal, Optional
+from pydantic import BaseModel, Field
 
 
 class DashboardStatsResponse(BaseModel):
@@ -29,3 +29,25 @@ class AdminReservationResponse(BaseModel):
     match_date: datetime
     status: str
     payment_amount: float | None = None
+
+
+# Schema for admin reply payload
+class AdminReportReplyRequest(BaseModel):
+    admin_response: str = Field(
+        ..., min_length=1, examples=["پاسخ پشتیبانی ثبت شد."]
+    )
+    status: str = Field("resolved", examples=["resolved"])
+
+
+# Schema for returning reports list to admin dashboard
+class AdminReportResponse(BaseModel):
+    report_id: int
+    user_id: int
+    user_name: Optional[str] = None
+    ticket_id: Optional[int] = None
+    reservation_id: Optional[int] = None
+    category: str
+    report_text: str
+    admin_response: Optional[str] = None
+    status: str
+    created_at: datetime

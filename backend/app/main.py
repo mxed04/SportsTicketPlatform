@@ -19,12 +19,17 @@ from app.rate_limiter import limiter
 
 app = FastAPI(
     title=settings.APP_NAME,
-    version="3.0.0",
-    description="SportsTicketPlatform API - Phase 3 (Raw SQL & Redis Cache)",
+    version="4.0.0",
+    description=(
+        "SportsTicketPlatform API - "
+        "Phase 4 (Raw SQL, Redis & ElasticSearch)"
+    ),
 )
 
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_exception_handler(
+    RateLimitExceeded, _rate_limit_exceeded_handler
+)
 
 # 🔴 Fixing CORS settings for frontend communication
 origins = [
@@ -37,12 +42,10 @@ origins = [
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,  # Allow only specified origins for security
-    allow_credentials=True,  # Allow sending cookies and authentication tokens
-    allow_methods=[
-        "*"
-    ],  # Allow executing all methods (GET, POST, PUT, DELETE, OPTIONS)
-    allow_headers=["*"],  # Allow receiving all custom headers
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 app.include_router(auth.router)
