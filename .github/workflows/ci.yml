@@ -41,7 +41,7 @@ jobs:
       - name: Insert Seed Data
         env:
           PGPASSWORD: test_password
-        run: psql -h localhost -U test_user -d test_db -f database/scripts/init.sql
+        run: psql -h localhost -U test_user -d test_db -f database/scripts/seed.sql
 
       - name: Create Stored Procedures & Triggers
         env:
