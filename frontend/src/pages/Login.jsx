@@ -63,7 +63,8 @@ export default function Login() {
     e.preventDefault();
     setLoading(true);
     try {
-      await api.post('/users/request-otp', { phone_number: phone });
+      // 🔴 FIX: Changed from /users/request-otp to /auth/otp
+      await api.post('/auth/otp', { phone_number: phone });
       toast.success('کد تایید ارسال شد. لطفاً فرم را تکمیل کنید.');
       setStep(2);
     } catch (err) {
@@ -77,7 +78,8 @@ export default function Login() {
     e.preventDefault();
     setLoading(true);
     try {
-      await api.post('/users/register', {
+      // 🔴 FIX: Changed from /users/register to /auth/signup
+      await api.post('/auth/signup', {
         phone_number: phone,
         otp_code: otp,
         first_name: firstName,
@@ -100,7 +102,8 @@ export default function Login() {
     e.preventDefault();
     setLoading(true);
     try {
-      await api.post('/users/request-otp', { phone_number: phone });
+      // 🔴 FIX: Changed from /users/request-otp to /auth/otp
+      await api.post('/auth/otp', { phone_number: phone });
       toast.success('کد بازیابی ارسال شد.');
       setStep(2);
     } catch (err) {
@@ -114,8 +117,8 @@ export default function Login() {
     e.preventDefault();
     setLoading(true);
     try {
-      // Assuming a standard reset password endpoint
-      await api.post('/users/reset-password', {
+      // 🔴 FIX: Changed to /auth/reset-password based on standard naming
+      await api.post('/auth/reset-password', {
         phone_number: phone,
         otp_code: otp,
         new_password: password,
