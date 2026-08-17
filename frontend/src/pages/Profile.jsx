@@ -29,7 +29,8 @@ export default function Profile() {
       try {
         // 1. Fetch User Profile Data
         try {
-          const userRes = await api.get('/users/me');
+          // 🔴 FIX: Changed from /users/me to /user/profile
+          const userRes = await api.get('/user/profile');
           if (userRes.data) {
             setProfileData({
               first_name: userRes.data.first_name || '',
@@ -107,7 +108,8 @@ export default function Profile() {
     e.preventDefault();
     setUpdatingProfile(true);
     try {
-      await api.put('/users/me', {
+      // 🔴 FIX: Changed from /users/me to /user/profile
+      await api.put('/user/profile', {
         first_name: profileData.first_name,
         last_name: profileData.last_name,
         email: profileData.email,
@@ -327,7 +329,6 @@ export default function Profile() {
                   <label className="block text-xs font-bold text-gray-700 mb-1.5">شهر محل سکونت</label>
                   <input type="text" className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 text-sm" value={profileData.city} onChange={e => setProfileData({...profileData, city: e.target.value})} required />
                 </div>
-                {/* Phone number is usually read-only unless an OTP change process is implemented */}
                 <div className="md:col-span-2">
                   <label className="block text-xs font-bold text-gray-500 mb-1.5">شماره موبایل (غیرقابل تغییر)</label>
                   <input type="text" dir="ltr" className="w-full px-4 py-3 bg-gray-100 border border-gray-200 rounded-xl text-sm text-gray-500 cursor-not-allowed" value={profileData.phone_number} disabled />
