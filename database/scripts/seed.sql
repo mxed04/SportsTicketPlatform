@@ -34,25 +34,24 @@ INSERT INTO tickets (home_team, away_team, match_date, sport_type, price, remain
 ('Japan', 'France', CURRENT_TIMESTAMP + INTERVAL '12 days', 'volleyball', 800000.00, 800, true, 'Yoyogi National Gymnasium', 'Premium', 'FIVB', 'Tokyo'),
 ('Liverpool', 'Chelsea', CURRENT_TIMESTAMP + INTERVAL '14 days', 'football', 1300000.00, 1000, true, 'Anfield Stadium', 'Standard', 'Premier League', 'Liverpool');
 
--- 3. Insert Specific Details
-INSERT INTO football_details (ticket_id, league_name, stadium_name) VALUES 
-(1, 'La Liga', 'Santiago Bernabeu'), 
-(2, 'Premier League', 'Etihad Stadium'), 
-(3, 'Bundesliga', 'Allianz Arena'), 
-(10, 'Premier League', 'Anfield Stadium');
+-- 3. Insert Specific Details (Fixed: added ticket_type and ticket_tier)
+INSERT INTO football_details (ticket_id, league_name, stadium_name, stand_section, row_number, seat_number, ticket_type) VALUES 
+(1, 'La Liga', 'Santiago Bernabeu', 'North Stand', 5, 12, 'VIP'), 
+(2, 'Premier League', 'Etihad Stadium', 'South Stand', 12, 45, 'Standard'), 
+(3, 'Bundesliga', 'Allianz Arena', 'Main Stand', 8, 33, 'Premium'), 
+(10, 'Premier League', 'Anfield Stadium', 'The Kop', 22, 110, 'Standard');
 
-INSERT INTO basketball_details (ticket_id, league_name, hall_name) VALUES 
-(4, 'NBA', 'Crypto.com Arena'), 
-(5, 'NBA', 'Chase Center'), 
-(6, 'NBA', 'Kaseya Center');
+INSERT INTO basketball_details (ticket_id, league_name, hall_name, seat_section, row_number, seat_number, ticket_tier) VALUES 
+(4, 'NBA', 'Crypto.com Arena', 'Courtside A', 1, 4, 'VIP'), 
+(5, 'NBA', 'Chase Center', 'Lower Bowl B', 15, 88, 'Standard'), 
+(6, 'NBA', 'Kaseya Center', 'Upper Level C', 30, 210, 'Standard');
 
-INSERT INTO volleyball_details (ticket_id, league_name, hall_name) VALUES 
-(7, 'FIVB Nations', 'Maracanãzinho Arena'), 
-(8, 'FIVB Nations', 'Spodek Arena'), 
-(9, 'FIVB Nations', 'Yoyogi National Gymnasium');
+INSERT INTO volleyball_details (ticket_id, league_name, hall_name, seat_section, row_number, seat_number, ticket_tier) VALUES 
+(7, 'FIVB Nations', 'Maracanãzinho Arena', 'VIP Zone', 2, 10, 'VIP'), 
+(8, 'FIVB Nations', 'Spodek Arena', 'Zone A', 10, 55, 'Standard'), 
+(9, 'FIVB Nations', 'Yoyogi National Gymnasium', 'Zone B', 14, 102, 'Premium');
 
 -- 4. Insert Reservations
--- FIX: Explicitly providing both reserved_at and expires_at to satisfy check_reservation_dates (reserved_at < expires_at)
 INSERT INTO reservations (user_id, ticket_id, status, reserved_at, expires_at) VALUES
 (1, 1, 'paid', CURRENT_TIMESTAMP - INTERVAL '1 days', CURRENT_TIMESTAMP + INTERVAL '2 days'),
 (2, 4, 'paid', CURRENT_TIMESTAMP - INTERVAL '2 days', CURRENT_TIMESTAMP + INTERVAL '1 days'),
@@ -62,7 +61,7 @@ INSERT INTO reservations (user_id, ticket_id, status, reserved_at, expires_at) V
 (6, 8, 'cancelled', CURRENT_TIMESTAMP - INTERVAL '2 days', CURRENT_TIMESTAMP - INTERVAL '1 days'),
 (7, 3, 'cancelled', CURRENT_TIMESTAMP - INTERVAL '3 days', CURRENT_TIMESTAMP - INTERVAL '2 days');
 
--- 5. Insert Payments (Using paid_at)
+-- 5. Insert Payments
 INSERT INTO payments (reservation_id, user_id, amount, status, payment_method, paid_at) VALUES
 (1, 1, 1500000.00, 'successful', 'credit_card', CURRENT_TIMESTAMP - INTERVAL '1 days'),
 (2, 2, 2500000.00, 'successful', 'paypal', CURRENT_TIMESTAMP - INTERVAL '2 days'),
