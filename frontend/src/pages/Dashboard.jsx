@@ -29,236 +29,228 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [userRole, setUserRole] = useState(null);
 
   // Search and Filter States
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSport, setSelectedSport] = useState('all');
-  const [venueFilter, setVenueFilter] = useState('');
 
-  const userRole = getUserRole();
-  const isAdminOrSupport = userRole === 'admin' || userRole === 'support';
-
-  // 🔴 CONNECT TO ELASTICSEARCH: Fetch from backend API
-  const fetchTicketsFromES = async () => {
-    setLoading(true);
-    try {
-      const params = {};
-      if (searchQuery.trim()) params.q = searchQuery.trim();
-      if (selectedSport !== 'all') params.sport_type = selectedSport;
-      if (venueFilter.trim()) params.venue = venueFilter.trim();
-
-      // Sending request directly to our powerful ElasticSearch API
-      const response = await api.get('/tickets/search', { params });
-      const data = response.data?.tickets || response.data || [];
-      setTickets(Array.isArray(data) ? data : []);
-      
-    } catch (error) {
-      // Ignore 429 Too Many Requests in console to keep UI clean
-      if (error.response?.status !== 429) {
-        console.error("ES Search Error:", error);
-        toast.error('خطا در جستجوی هوشمند بلیت‌ها');
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // 🔴 SMART DEBOUNCE: Wait 600ms after user stops typing before asking backend
   useEffect(() => {
-    const timer = setTimeout(() => {
-      fetchTicketsFromES();
-    }, 600);
-    
-    return () => clearTimeout(timer);
-  }, [searchQuery, selectedSport, venueFilter]);
+    setUserRole(getUserRole());
+  }, []);
 
-  const handleClearFilters = () => {
-    setSearchQuery('');
-    setSelectedSport('all');
-    setVenueFilter('');
+  // Fetch Tickets / Live Search from ElasticSearch or Backend
+  useEffect(() => {
+    const fetchTickets = async () => {
+      setLoading(true);
+      try {
+        let endpoint = '/tickets';
+        const params = new URLSearchParams();
+
+        if (searchQuery.trim()) {
+          endpoint = '/tickets/search';
+          params.append('q', searchQuery.trim());
+        }
+
+        if (selectedSport !== 'all') {
+          params.append('sport_type', selectedSport);
+        }
+
+        const queryString = params.toString();
+        const url = queryString ? `${endpoint}?${queryString}` : endpoint;
+
+        const response = await api.get(url);
+        const data = response.data?.tickets || response.data || [];
+        setTickets(Array.isArray(data) ? data : []);
+      } catch (error) {
+        toast.error('Failed to load event tickets.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    // Debounce search inputs by 500ms
+    const timer = setTimeout(() => {
+      fetchTickets();
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery, selectedSport]);
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('role');
+    toast.success('Signed out successfully.');
+    navigate('/');
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 font-sans pb-12" dir="rtl">
-      {/* Top Header */}
-      <header className="bg-white border-b sticky top-0 z-10 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-2xl">🎟️</span>
-            <h1 className="text-xl font-bold text-gray-900">
-              سامانه رزرو بلیت ورزشی
-            </h1>
+    <div className="min-h-screen bg-[#0a0a0a] text-gray-100 font-sans pb-16">
+      {/* Top Navbar */}
+      <header className="bg-white/5 border-b border-white/10 sticky top-0 z-30 backdrop-blur-md">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500 to-blue-500 flex items-center justify-center text-xl shadow-lg shadow-indigo-500/20">
+              🎟️
+            </div>
+            <div>
+              <h1 className="text-lg font-bold text-white tracking-tight">
+                Sports<span className="text-indigo-400">Ticket</span>
+              </h1>
+              <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wider">
+                Event Booking Portal
+              </p>
+            </div>
           </div>
 
           <div className="flex items-center gap-3">
-            {isAdminOrSupport && (
-              <button
-                onClick={() => navigate('/admin')}
-                className="text-xs bg-purple-100 text-purple-700 px-3 py-2 rounded-lg font-bold hover:bg-purple-200 transition-all"
-              >
-                👑 پنل مدیریت
-              </button>
-            )}
-            <button
-              onClick={() => navigate('/support')}
-              className="text-xs bg-gray-100 text-gray-700 px-3 py-2 rounded-lg font-bold hover:bg-gray-200 transition-all"
-            >
-              🎧 پشتیبانی
-            </button>
             <button
               onClick={() => navigate('/profile')}
-              className="text-xs bg-blue-600 text-white px-3 py-2 rounded-lg font-bold hover:bg-blue-700 transition-all shadow-sm"
+              className="px-4 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-xs font-semibold text-gray-200 transition-all flex items-center gap-2"
             >
-              👤 پروفایل من
+              <span>👤 My Profile</span>
+            </button>
+
+            {userRole === 'admin' && (
+              <button
+                onClick={() => navigate('/admin')}
+                className="px-4 py-2.5 bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 rounded-xl text-xs font-semibold text-indigo-300 transition-all"
+              >
+                ⚡ Admin Panel
+              </button>
+            )}
+
+            <button
+              onClick={handleLogout}
+              className="px-4 py-2.5 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 rounded-xl text-xs font-semibold text-rose-400 transition-all"
+            >
+              Sign Out
             </button>
           </div>
         </div>
       </header>
 
-      {/* Main Content */}
+      {/* Main Container */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8">
-        
-        {/* Advanced Search & Filter Controls */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-8 space-y-4">
-          <div className="flex flex-col md:flex-row gap-4 items-center">
-            
-            {/* Search Query Input */}
-            <div className="flex-1 w-full relative">
-              <span className="absolute right-3.5 top-3.5 text-gray-400 text-sm">
-                🔍
-              </span>
+        {/* Hero & Search Header */}
+        <div className="mb-10 text-center max-w-3xl mx-auto">
+          <h2 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight mb-3">
+            Find & Reserve <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-blue-400">Live Sports Tickets</span>
+          </h2>
+          <p className="text-sm text-gray-400 mb-8">
+            Sub-second ElasticSearch query engine with real-time capacity monitoring and dynamic pricing.
+          </p>
+
+          {/* Search Controls */}
+          <div className="flex flex-col sm:flex-row gap-3 bg-white/5 border border-white/10 p-2.5 rounded-2xl backdrop-blur-xl shadow-2xl">
+            <div className="relative flex-1">
               <input
                 type="text"
-                placeholder="جستجوی هوشمند تیم، مسابقه یا ورزشگاه (با پشتیبانی از غلط املایی)..."
+                placeholder="Search teams, venues, or cities (e.g. Real Madrid, Bernabeu)..."
+                className="w-full pl-11 pr-4 py-3 bg-transparent text-sm text-white placeholder-gray-500 focus:outline-none"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pr-10 pl-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
               />
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 text-lg">🔍</span>
             </div>
 
-            {/* Sport Type Dropdown */}
-            <div className="w-full md:w-48">
-              <select
-                value={selectedSport}
-                onChange={(e) => setSelectedSport(e.target.value)}
-                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="all">همه ورزش‌ها</option>
-                <option value="football">⚽ فوتبال</option>
-                <option value="volleyball">🏐 والیبال</option>
-                <option value="basketball">🏀 بسکتبال</option>
-              </select>
+            {/* Sport Category Filter */}
+            <div className="flex bg-black/40 p-1 rounded-xl border border-white/5 gap-1">
+              {['all', 'football', 'basketball', 'volleyball'].map((sport) => (
+                <button
+                  key={sport}
+                  onClick={() => setSelectedSport(sport)}
+                  className={`px-4 py-2 rounded-lg text-xs font-bold capitalize transition-all ${
+                    selectedSport === sport
+                      ? 'bg-indigo-600 text-white shadow-md'
+                      : 'text-gray-400 hover:text-gray-200'
+                  }`}
+                >
+                  {sport}
+                </button>
+              ))}
             </div>
-
-            {/* Venue Filter Input */}
-            <div className="w-full md:w-48">
-              <input
-                type="text"
-                placeholder="نام ورزشگاه..."
-                value={venueFilter}
-                onChange={(e) => setVenueFilter(e.target.value)}
-                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            {/* Reset Filters Button */}
-            {(searchQuery || selectedSport !== 'all' || venueFilter) && (
-              <button
-                onClick={handleClearFilters}
-                className="w-full md:w-auto px-4 py-3 text-sm text-red-600 bg-red-50 hover:bg-red-100 font-bold rounded-xl transition-all whitespace-nowrap"
-              >
-                حذف فیلترها
-              </button>
-            )}
           </div>
         </div>
 
-        {/* Tickets Results Grid */}
+        {/* Tickets Grid */}
         {loading ? (
-          <div className="text-center py-20 text-gray-500 font-bold animate-pulse">
-            در حال جستجو در پایگاه داده ElasticSearch...
+          <div className="text-center py-20 text-gray-500 animate-pulse text-sm">
+            Searching ElasticSearch database...
           </div>
         ) : tickets.length === 0 ? (
-          <div className="bg-white rounded-2xl p-12 text-center border border-dashed border-gray-300">
-            <span className="text-5xl block mb-4">🔍</span>
-            <h3 className="text-lg font-bold text-gray-800 mb-2">
-              هیچ بلیتی با این مشخصات یافت نشد!
-            </h3>
-            <p className="text-sm text-gray-500">
-              عبارت دیگری را جستجو کرده یا فیلترها را پاک کنید.
-            </p>
+          <div className="text-center py-20 bg-white/5 rounded-3xl border border-white/10 border-dashed max-w-md mx-auto">
+            <span className="text-5xl block mb-4">🎟️</span>
+            <h3 className="text-lg font-bold text-white mb-1">No Tickets Found</h3>
+            <p className="text-xs text-gray-400">Try adjusting your search query or sport filters.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {tickets.map((t) => {
-              const ticketId = t.id || t.ticket_id;
-              const home = t.home_team;
-              const away = t.away_team;
-              const title = (home && away) 
-                ? `${home} vs ${away}` 
-                : (t.title || 'بلیت مسابقه');
-                
-              const venue = t.venue_name || t.venue || t.location_name || 'نامشخص';
-              const capacity = t.remaining_capacity ?? t.capacity ?? 0;
-              const isSurge = capacity > 0 && capacity < 1000;
-              
-              const matchDate = t.match_date
-                ? new Date(t.match_date).toLocaleDateString('fa-IR')
-                : 'نامشخص';
+            {tickets.map((ticket, index) => {
+              const ticketId = ticket.id || ticket.ticket_id;
+              const homeTeam = ticket.home_team || 'Home Team';
+              const awayTeam = ticket.away_team || 'Away Team';
+              const venue = ticket.venue_name || ticket.venue || 'Stadium';
+              const sport = ticket.sport_type || 'Sports';
+              const price = ticket.price;
+              const remaining = ticket.remaining_capacity ?? ticket.capacity ?? 0;
+              const isSurge = remaining < 1000 || ticket.is_surge_pricing;
+              const matchDate = ticket.match_date ? new Date(ticket.match_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Upcoming';
 
               return (
                 <div
-                  key={ticketId}
-                  className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-all flex flex-col justify-between"
+                  key={ticketId || index}
+                  className="bg-white/5 hover:bg-white/[0.08] border border-white/10 hover:border-indigo-500/50 rounded-3xl p-6 transition-all duration-300 shadow-xl group flex flex-col justify-between relative overflow-hidden"
                 >
-                  <div>
-                    {/* Card Header Banner */}
-                    <div className="bg-blue-600 p-5 text-white flex justify-between items-start">
-                      <div>
-                        <span className="text-xs bg-blue-500 px-2.5 py-1 rounded-full font-bold inline-block mb-2">
-                          {t.sport_type || 'ورزشی'}
-                        </span>
-                        <h3 className="font-black text-xl">{title}</h3>
-                      </div>
-                      {isSurge && (
-                        <span className="bg-orange-500 text-white text-[10px] font-bold px-2 py-1 rounded-md animate-pulse">
-                          🔥 ظرفیت محدود
-                        </span>
-                      )}
-                    </div>
+                  {/* Top Badge Row */}
+                  <div className="flex justify-between items-center mb-5">
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-3 py-1 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-full">
+                      ⚽ {sport}
+                    </span>
+                    {isSurge && (
+                      <span className="text-[10px] font-bold uppercase tracking-wider px-3 py-1 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-full animate-pulse">
+                        🔥 High Demand
+                      </span>
+                    )}
+                  </div>
 
-                    {/* Ticket Details */}
-                    <div className="p-5 space-y-3 text-sm text-gray-600">
-                      <div className="flex justify-between items-center border-b border-gray-50 pb-2">
-                        <span>تاریخ مسابقه:</span>
-                        <span className="font-bold text-gray-800">{matchDate}</span>
-                      </div>
-                      <div className="flex justify-between items-center border-b border-gray-50 pb-2">
-                        <span>ورزشگاه:</span>
-                        <span className="font-bold text-gray-800">{venue}</span>
-                      </div>
-                      <div className="flex justify-between items-center border-b border-gray-50 pb-2">
-                        <span>قیمت بلیت:</span>
-                        <span className="font-bold text-green-600 text-base">
-                          {t.price ? Number(t.price).toLocaleString() : '۰'} تومان
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span>ظرفیت باقی‌مانده:</span>
-                        <span className="font-bold text-gray-800">{capacity} نفر</span>
-                      </div>
+                  {/* Match Teams Title */}
+                  <div className="mb-6">
+                    <h3 className="text-xl font-extrabold text-white group-hover:text-indigo-300 transition-colors">
+                      {homeTeam} <span className="text-xs text-gray-500 font-normal px-1">vs</span> {awayTeam}
+                    </h3>
+                    <p className="text-xs text-gray-400 mt-1 flex items-center gap-1">
+                      <span>📍</span> {venue}
+                    </p>
+                  </div>
+
+                  {/* Details Card */}
+                  <div className="bg-black/30 rounded-2xl p-4 border border-white/5 text-xs text-gray-300 space-y-2 mb-6">
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Date:</span>
+                      <span className="font-semibold text-gray-200">{matchDate}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Available Seats:</span>
+                      <span className={`font-semibold ${remaining < 100 ? 'text-amber-400' : 'text-gray-200'}`}>
+                        {remaining} remaining
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center pt-2 border-t border-white/5">
+                      <span className="text-gray-500">Ticket Price:</span>
+                      <span className="text-base font-extrabold text-emerald-400">
+                        {price ? `${Number(price).toLocaleString()} Toman` : 'Free'}
+                      </span>
                     </div>
                   </div>
 
-                  {/* Reserve Action Button */}
-                  <div className="p-5 pt-0">
-                    <button
-                      onClick={() => navigate(`/tickets/${ticketId}`)}
-                      className="w-full bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white font-bold py-3 rounded-xl transition-all text-sm shadow-sm"
-                    >
-                      رزرو بلیت →
-                    </button>
-                  </div>
+                  {/* Action Button */}
+                  <button
+                    onClick={() => navigate(`/tickets/${ticketId}`)}
+                    className="w-full bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white font-bold py-3.5 rounded-xl transition-all shadow-lg shadow-indigo-500/20 text-xs uppercase tracking-wider"
+                  >
+                    Reserve Ticket →
+                  </button>
                 </div>
               );
             })}
