@@ -1,37 +1,33 @@
 import logging
-
-# 🔴 Added Request
 from fastapi import (
     APIRouter,
-    HTTPException,
-    status,
     Depends,
+    HTTPException,
     Request,
+    status,
 )
 from fastapi.security import (
-    OAuth2PasswordRequestForm,
     OAuth2PasswordBearer,
+    OAuth2PasswordRequestForm,
 )
+
+from app.database import get_db_cursor
+from app.rate_limiter import limiter
+from app.redis_client import generate_and_set_otp, verify_otp
+from app.routes.reservations import get_current_user_id
 from app.schemas.auth import (
     OTPRequest,
     OTPResponse,
-    UserSignup,
-    TokenResponse,
     PasswordResetRequest,
+    TokenResponse,
+    UserSignup,
 )
-from app.redis_client import generate_and_set_otp, verify_otp
-from app.database import get_db_cursor
 from app.security import (
     create_access_token,
     get_password_hash,
     verify_password,
 )
-from app.routes.reservations import get_current_user_id
 
-# 🔴 Imported limiter
-from app.rate_limiter import limiter
-
-# Set up logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
@@ -43,45 +39,42 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
     response_model=OTPResponse,
     status_code=status.HTTP_200_OK,
 )
-# 🔴 Security guard: Maximum 3 times per minute.
 @limiter.limit("3/minute")
 def request_otp(request: Request, data: OTPRequest):
-    # 🔴 Adding a request
+    """Generates an OTP code and saves it in Redis with a
+      2-minute expiration."""
     otp_code = generate_and_set_otp(data.phone_number)
-
     logger.info(
-        (
-            f"📩 MOCK SMS/EMAIL DELIVERY: "
-            f"OTP code for {data.phone_number} is {otp_code}"
-        )
+        f"Generated OTP '{otp_code}' for phone number: {data.phone_number}"
     )
 
-    return {
-        "message": "OTP sent successfully",
-        "expires_in": "120 seconds",
-    }
+    return OTPResponse(
+        message="OTP sent successfully. Valid for 2 minutes.",
+        otp_code=otp_code,
+    )
 
 
 @router.post(
     "/signup",
-    response_model=TokenResponse,
+    response_model=dict,
     status_code=status.HTTP_201_CREATED,
 )
 def signup(data: UserSignup):
-    # 1. Verify OTP
+    """Verifies OTP and registers a new user in PostgreSQL."""
+    # 1. Verify OTP from Redis
     if not verify_otp(data.phone_number, data.otp_code):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid or expired OTP code",
+            detail="Invalid or expired OTP code.",
         )
 
     try:
         with get_db_cursor() as cursor:
-            # 2. Check if user already exists
+            # 2. Check if phone_number or email already exists
             cursor.execute(
                 (
-                    "SELECT user_id FROM users "
-                    "WHERE phone_number = %s OR email = %s;"
+                    "SELECT id FROM users WHERE phone_number = %s "
+                    "OR email = %s;"
                 ),
                 (data.phone_number, data.email),
             )
@@ -95,47 +88,36 @@ def signup(data: UserSignup):
                 )
 
             # 3. Hash password and insert user
-            hashed_password = get_password_hash(data.password)
-            insert_query = """
-                INSERT INTO users (
-                    phone_number, email, password_hash,
-                    first_name, last_name, city
-                )
-                VALUES (%s, %s, %s, %s, %s, %s)
-                RETURNING user_id, role;
-            """
+            hashed_pwd = get_password_hash(data.password)
             cursor.execute(
-                insert_query,
                 (
-                    data.phone_number,
-                    data.email,
-                    hashed_password,
+                    "INSERT INTO users (first_name, last_name, "
+                    "phone_number, email, password_hash, role, city) "
+                    "VALUES (%s, %s, %s, %s, %s, 'audience', %s) "
+                    "RETURNING id;"
+                ),
+                (
                     data.first_name,
                     data.last_name,
+                    data.phone_number,
+                    data.email,
+                    hashed_pwd,
                     data.city,
                 ),
             )
             new_user = cursor.fetchone()
             cursor.connection.commit()
 
-            access_token = create_access_token(
-                data={
-                    "sub": str(new_user["user_id"]),
-                    "role": new_user["role"],
-                },
-            )
             return {
-                "access_token": access_token,
-                "token_type": "bearer",
                 "message": "User registered successfully",
+                "user_id": new_user["id"],
             }
-
     except Exception as e:
         if isinstance(e, HTTPException):
             raise e
+        err_msg = f"Database error: {str(e)}"
         raise HTTPException(
-            status_code=500,
-            detail=f"Database error: {str(e)}",
+            status_code=500, detail=err_msg
         )
 
 
@@ -145,13 +127,14 @@ def signup(data: UserSignup):
     status_code=status.HTTP_200_OK,
 )
 def login(form_data: OAuth2PasswordRequestForm = Depends()):
+    """Authenticates user via OAuth2 Form (phone_number = username)
+      and returns JWT."""
     try:
         with get_db_cursor() as cursor:
             cursor.execute(
                 (
-                    "SELECT user_id, password_hash, role, "
-                    "is_active FROM users "
-                    "WHERE phone_number = %s;"
+                    "SELECT id, password_hash, role "
+                    "FROM users WHERE phone_number = %s;"
                 ),
                 (form_data.username,),
             )
@@ -166,26 +149,14 @@ def login(form_data: OAuth2PasswordRequestForm = Depends()):
                     headers={"WWW-Authenticate": "Bearer"},
                 )
 
-            if not user["is_active"]:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail=(
-                        "User account is deactivated. "
-                        "Please contact support."
-                    ),
-                )
-
+            # Generate Access Token
             access_token = create_access_token(
-                data={
-                    "sub": str(user["user_id"]),
-                    "role": user["role"],
-                }
+                data={"sub": str(user["id"]), "role": user["role"]}
             )
-            return {
-                "access_token": access_token,
-                "token_type": "bearer",
-                "message": "Login successful",
-            }
+
+            return TokenResponse(
+                access_token=access_token, token_type="bearer"
+            )
     except Exception as e:
         if isinstance(e, HTTPException):
             raise e
@@ -195,40 +166,30 @@ def login(form_data: OAuth2PasswordRequestForm = Depends()):
         )
 
 
-@router.post(
-    "/reset-password",
-    response_model=dict,
-    status_code=status.HTTP_200_OK,
-    summary="Reset forgotten password using OTP",
-)
+@router.post("/reset-password", response_model=dict)
 def reset_password(data: PasswordResetRequest):
-    # 1. Verification of the confirmation code from Redis
+    """Resets user password after verifying OTP."""
+    # 1. Verify OTP
     if not verify_otp(data.phone_number, data.otp_code):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid or expired OTP code",
+            detail="Invalid or expired OTP code.",
         )
 
     try:
         with get_db_cursor() as cursor:
-            # 2. Checking whether a user with this number exists.
+            # 2. Check if user exists
             cursor.execute(
-                (
-                    "SELECT user_id FROM users "
-                    "WHERE phone_number = %s;"
-                ),
+                "SELECT id FROM users WHERE phone_number = %s;",
                 (data.phone_number,),
             )
             if not cursor.fetchone():
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
-                    detail=(
-                        "User with this phone number "
-                        "does not exist"
-                    ),
+                    detail="User with this phone number does not exist",
                 )
 
-            # 3. Hashing the new password and update database
+            # 3. Hash new password & update
             new_password_hash = get_password_hash(data.new_password)
             cursor.execute(
                 (
@@ -261,8 +222,6 @@ def reset_password(data: PasswordResetRequest):
 )
 def test_auth(user_id: int = Depends(get_current_user_id)):
     return {
-        "message": (
-            f"If you see this, you are authenticated. "
-            f"Your user_id is {user_id}."
-        ),
+        "message": f"If you see this, you are authenticated. User ID:"
+        f"{user_id}"
     }
