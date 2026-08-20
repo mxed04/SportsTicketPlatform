@@ -39,17 +39,18 @@ export default function Dashboard() {
     setUserRole(getUserRole());
   }, []);
 
-  // Fetch Tickets / Live Search from ElasticSearch or Backend
+  // Fetch Tickets / Live Search from ElasticSearch
   useEffect(() => {
     const fetchTickets = async () => {
       setLoading(true);
       try {
-        let endpoint = '/tickets';
+        // 🔴 FIX: Always route through the ElasticSearch endpoint
+        const endpoint = '/tickets/search'; 
         const params = new URLSearchParams();
 
         if (searchQuery.trim()) {
-          endpoint = '/tickets/search';
-          params.append('q', searchQuery.trim());
+          // نکته: اگر بک‌اند شما کلمه دیگری مثل 'keyword' می‌خواهد، 'q' را تغییر دهید
+          params.append('q', searchQuery.trim()); 
         }
 
         if (selectedSport !== 'all') {
