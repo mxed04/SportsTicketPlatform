@@ -41,8 +41,8 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 )
 @limiter.limit("3/minute")
 def request_otp(request: Request, data: OTPRequest):
-    """Generates an OTP code and saves it in Redis with a
-      2-minute expiration."""
+    """Generates an OTP code and saves it in Redis
+      with a 2-minute expiration."""
     otp_code = generate_and_set_otp(data.phone_number)
     logger.info(
         f"Generated OTP '{otp_code}' for phone number: {data.phone_number}"
@@ -51,7 +51,7 @@ def request_otp(request: Request, data: OTPRequest):
     return OTPResponse(
         message="OTP sent successfully. Valid for 2 minutes.",
         otp_code=otp_code,
-        expires_in=120,  # 2 minutes in seconds
+        expires_in="120"
     )
 
 
@@ -72,9 +72,10 @@ def signup(data: UserSignup):
     try:
         with get_db_cursor() as cursor:
             # 2. Check if phone_number or email already exists
+            #  (FIXED: id -> user_id)
             cursor.execute(
                 (
-                    "SELECT id FROM users WHERE phone_number = %s "
+                    "SELECT user_id FROM users WHERE phone_number = %s "
                     "OR email = %s;"
                 ),
                 (data.phone_number, data.email),
@@ -89,13 +90,14 @@ def signup(data: UserSignup):
                 )
 
             # 3. Hash password and insert user
+            # (FIXED: RETURNING id -> RETURNING user_id)
             hashed_pwd = get_password_hash(data.password)
             cursor.execute(
                 (
                     "INSERT INTO users (first_name, last_name, "
                     "phone_number, email, password_hash, role, city) "
                     "VALUES (%s, %s, %s, %s, %s, 'audience', %s) "
-                    "RETURNING id;"
+                    "RETURNING user_id;"
                 ),
                 (
                     data.first_name,
@@ -111,7 +113,7 @@ def signup(data: UserSignup):
 
             return {
                 "message": "User registered successfully",
-                "user_id": new_user["id"],
+                "user_id": new_user["user_id"],
             }
     except Exception as e:
         if isinstance(e, HTTPException):
@@ -132,9 +134,10 @@ def login(form_data: OAuth2PasswordRequestForm = Depends()):
       and returns JWT."""
     try:
         with get_db_cursor() as cursor:
+            # FIXED: id -> user_id
             cursor.execute(
                 (
-                    "SELECT id, password_hash, role "
+                    "SELECT user_id, password_hash, role "
                     "FROM users WHERE phone_number = %s;"
                 ),
                 (form_data.username,),
@@ -150,9 +153,9 @@ def login(form_data: OAuth2PasswordRequestForm = Depends()):
                     headers={"WWW-Authenticate": "Bearer"},
                 )
 
-            # Generate Access Token
+            # Generate Access Token (FIXED: id -> user_id)
             access_token = create_access_token(
-                data={"sub": str(user["id"]), "role": user["role"]}
+                data={"sub": str(user["user_id"]), "role": user["role"]}
             )
 
             return TokenResponse(
@@ -179,9 +182,9 @@ def reset_password(data: PasswordResetRequest):
 
     try:
         with get_db_cursor() as cursor:
-            # 2. Check if user exists
+            # 2. Check if user exists (FIXED: id -> user_id)
             cursor.execute(
-                "SELECT id FROM users WHERE phone_number = %s;",
+                "SELECT user_id FROM users WHERE phone_number = %s;",
                 (data.phone_number,),
             )
             if not cursor.fetchone():
