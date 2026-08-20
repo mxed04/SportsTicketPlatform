@@ -51,6 +51,7 @@ def request_otp(request: Request, data: OTPRequest):
     return OTPResponse(
         message="OTP sent successfully. Valid for 2 minutes.",
         otp_code=otp_code,
+        expires_in=120,  # 2 minutes in seconds
     )
 
 
