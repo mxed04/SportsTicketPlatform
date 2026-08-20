@@ -19,7 +19,7 @@ router = APIRouter(prefix="/api/payments", tags=["Payments"])
 
 
 @router.post(
-    "/",
+    "",
     response_model=PaymentResponse,
     status_code=status.HTTP_201_CREATED,
 )

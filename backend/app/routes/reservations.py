@@ -45,7 +45,7 @@ def get_current_user_id(token: str = Depends(oauth2_scheme)) -> int:
 
 
 @router.post(
-    "/",
+    "",
     response_model=ReservationResponse,
     status_code=status.HTTP_201_CREATED,
     summary=(
@@ -191,7 +191,7 @@ def reserve_ticket(
 
 # 🔴 NEW ENDPOINT: Join waitlist for sold out tickets
 @router.post(
-    "/waitlist",
+    "waitlist",
     response_model=dict,
     status_code=status.HTTP_200_OK,
     summary=(
