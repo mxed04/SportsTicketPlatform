@@ -3,10 +3,12 @@ from fastapi import (
     Depends,
     HTTPException,
     status,
+    Request,
 )
 from app.schemas.reports import ReportCreate, ReportResponse
 from app.database import get_db_cursor
 from app.routes.reservations import get_current_user_id
+from app.rate_limiter import limiter
 
 router = APIRouter(
     prefix="/api/reports",
@@ -14,13 +16,16 @@ router = APIRouter(
 )
 
 
+# 🩺 FIXED: Changed "/" to "" to prevent 404 Route errors
 @router.post(
-    "/",
+    "",
     response_model=ReportResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Submit a new support ticket/report",
 )
+@limiter.limit("3/minute")  # 🛡️ REAL-WORLD FEATURE: Anti-Spam Rate Limit
 def create_report(
+    request: Request,
     data: ReportCreate,
     user_id: int = Depends(get_current_user_id),
 ):

@@ -1,9 +1,9 @@
 from datetime import datetime
+import uuid
 import io
 import base64
 import json
 import qrcode
-
 from fastapi import APIRouter, Depends, HTTPException, Path, status
 from app.database import get_db_cursor
 from app.redis_client import clear_ticket_cache, pop_from_waitlist
@@ -20,7 +20,8 @@ router = APIRouter(prefix="/api/payments", tags=["Payments"])
 
 @router.post(
     "",
-    response_model=PaymentResponse,
+    response_model=PaymentResponse,  # 📌 Note: If `tracking_code` is not
+    # in the schema, add it to `schemas/payments.py`.
     status_code=status.HTTP_201_CREATED,
 )
 def process_payment(
@@ -29,7 +30,7 @@ def process_payment(
 ):
     try:
         with get_db_cursor() as cursor:
-            # Check if user is active
+            # 1. Check if user is active
             cursor.execute(
                 "SELECT is_active FROM users WHERE user_id = %s;",
                 (user_id,),
@@ -38,7 +39,7 @@ def process_payment(
             if not user or not user["is_active"]:
                 raise HTTPException(status_code=403, detail="Inactive user")
 
-            # Lock the reservation
+            # 2. Lock the reservation (Pessimistic Locking)
             cursor.execute(
                 (
                     "SELECT r.reservation_id, r.status, "
@@ -55,7 +56,10 @@ def process_payment(
             res = cursor.fetchone()
 
             if not res:
-                raise HTTPException(status_code=404, detail="Not found")
+                raise HTTPException(
+                    status_code=404,
+                    detail="Reservation not found",
+                )
             if res["status"] == "paid":
                 raise HTTPException(status_code=400, detail="Already paid")
             if res["status"] == "cancelled":
@@ -63,12 +67,12 @@ def process_payment(
             if res["is_expired"]:
                 raise HTTPException(status_code=400, detail="Expired")
 
-            # Calculate surge pricing correctly (15% if capacity < 1000)
+            # 3. Calculate surge pricing correctly (15% if capacity < 1000)
             base_price = float(res["price"])
             cap = res["remaining_capacity"]
             final_price = base_price * 1.15 if cap < 1000 else base_price
 
-            # Insert payment with EXACT final price
+            # 4. Insert payment with EXACT final price
             cursor.execute(
                 (
                     "INSERT INTO payments "
@@ -86,7 +90,7 @@ def process_payment(
             )
             payment = cursor.fetchone()
 
-            # Update reservation status
+            # 5. Update reservation status
             cursor.execute(
                 (
                     "UPDATE reservations SET status = 'paid' "
@@ -96,22 +100,32 @@ def process_payment(
             )
             cursor.connection.commit()
 
-            # Generate QR Code
+            # 🧾 6. REAL-WORLD FEATURE: Mock Bank Tracking Code
+            tracking_code = f"TRK-{uuid.uuid4().hex[:8].upper()}"
+
+            # 🚀 7. Sync capacity with ES and clear cache
+            try:
+                # The capacity has already been decremented at the
+                # reservation stage, so we sync that same cap.
+                update_ticket_capacity_in_es(res["ticket_id"], cap)
+                clear_ticket_cache()
+            except Exception:
+                pass  # خطا در کش نباید مانع صدور بلیت شود
+
+            # 8. Generate QR Code (Now includes Bank Tracking Code!)
             ticket_data = {
                 "reservation_id": data.reservation_id,
                 "ticket_id": res["ticket_id"],
                 "payment_id": payment["payment_id"],
                 "amount": float(payment["amount"]),
+                "tracking_code": tracking_code,  # 👈 Added to QR Payload
             }
-
             qr = qrcode.QRCode(version=1, box_size=10, border=4)
             qr.add_data(json.dumps(ticket_data))
             qr.make(fit=True)
-
             img = qr.make_image(fill_color="black", back_color="white")
             buf = io.BytesIO()
             img.save(buf, format="PNG")
-            
             qr_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
             qr_uri = f"data:image/png;base64,{qr_b64}"
 
@@ -120,9 +134,10 @@ def process_payment(
                 "reservation_id": data.reservation_id,
                 "amount": float(payment["amount"]),
                 "status": "successful",
-                "message": "Payment successful.",
+                "message": "Payment successful. Enjoy the match!",
                 "paid_at": payment["paid_at"].isoformat(),
                 "qr_code": qr_uri,
+                "tracking_code": tracking_code,  # 👈 Sent back to frontend
             }
 
     except Exception as e:
@@ -157,7 +172,10 @@ def calculate_cancellation_penalty(
             data = cursor.fetchone()
 
             if not data:
-                raise HTTPException(status_code=404, detail="Not found")
+                raise HTTPException(
+                    status_code=404,
+                    detail="Reservation not found",
+                )
 
             # Pending tickets have 0 penalty
             if data["status"] in ["pending", "cancelled"]:

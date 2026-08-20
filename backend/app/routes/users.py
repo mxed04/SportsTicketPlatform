@@ -1,10 +1,44 @@
+from backend.app import redis_client
 from fastapi import APIRouter, HTTPException, status, Depends
+import json
 from app.schemas.users import BookingResponse, UserProfileUpdate
 from app.database import get_db_cursor
 from app.routes.reservations import get_current_user_id
 from app.redis_client import invalidate_user_profile_cache
 
 router = APIRouter(prefix="/api/user", tags=["User Profile"])
+
+# 🩺 FIXED: Missing GET Profile Endpoint (Needed for React Profile.jsx)
+
+
+@router.get(
+    "/profile",
+    response_model=dict,
+    status_code=status.HTTP_200_OK,
+    summary="Get user profile data with Redis caching",
+)
+def get_user_profile(user_id: int = Depends(get_current_user_id)):
+    cache_key = f"user:{user_id}:profile"
+    cached = redis_client.get(cache_key)
+    if cached:
+        return {"user": json.loads(cached)}
+
+    try:
+        with get_db_cursor() as cursor:
+            cursor.execute(
+                "SELECT first_name, last_name, phone_number, email, city "
+                "FROM users WHERE user_id = %s;",
+                (user_id,)
+            )
+            user = cursor.fetchone()
+            if not user:
+                raise HTTPException(status_code=404, detail="User not found")
+
+            # Cache for 20 mins
+            redis_client.setex(cache_key, 1200, json.dumps(user))
+            return {"user": user}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get(
