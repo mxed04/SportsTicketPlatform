@@ -5,7 +5,7 @@ import api from '../api';
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
-  // Active tab: overview, tickets, users, reports
+  // Active tabs: overview, tickets, users, reports
   const [activeTab, setActiveTab] = useState('overview');
   const [loading, setLoading] = useState(false);
 
@@ -44,7 +44,7 @@ export default function AdminDashboard() {
     }
   };
 
-  // Fetch and sort all support reports (Highest ID first)
+  // Fetch and sort all support reports
   const fetchAllReports = async () => {
     setLoading(true);
     try {
@@ -52,7 +52,6 @@ export default function AdminDashboard() {
       const data = response.data?.reports || response.data || [];
       const list = Array.isArray(data) ? data : [];
       
-      // Sort reports by ID descending
       list.sort((a, b) => {
         const idA = a.report_id || a.id || 0;
         const idB = b.report_id || b.id || 0;
@@ -61,13 +60,13 @@ export default function AdminDashboard() {
       
       setReports(list);
     } catch (error) {
-      toast.error('خطا در دریافت لیست تیکت‌ها');
+      toast.error('Failed to retrieve support tickets.');
     } finally {
       setLoading(false);
     }
   };
 
-  // Fetch and sort all users (Highest ID first)
+  // Fetch and sort all users
   const fetchAllUsers = async () => {
     setLoading(true);
     try {
@@ -75,7 +74,6 @@ export default function AdminDashboard() {
       const data = response.data || [];
       const list = Array.isArray(data) ? data : [];
       
-      // Sort users by ID descending
       list.sort((a, b) => {
         const idA = a.user_id || a.id || 0;
         const idB = b.user_id || b.id || 0;
@@ -84,13 +82,13 @@ export default function AdminDashboard() {
 
       setUsers(list);
     } catch (error) {
-      toast.error('خطا در دریافت لیست کاربران');
+      toast.error('Failed to retrieve users list.');
     } finally {
       setLoading(false);
     }
   };
 
-  // Fetch and sort all tickets (Highest ID first)
+  // Fetch and sort all tickets
   const fetchAllTickets = async () => {
     setLoading(true);
     try {
@@ -98,7 +96,6 @@ export default function AdminDashboard() {
       const data = response.data || [];
       const list = Array.isArray(data) ? data : [];
       
-      // Sort tickets by ID descending
       list.sort((a, b) => {
         const idA = a.ticket_id || a.id || 0;
         const idB = b.ticket_id || b.id || 0;
@@ -107,19 +104,17 @@ export default function AdminDashboard() {
 
       setTickets(list);
     } catch (error) {
-      toast.error('خطا در دریافت لیست بلیت‌ها');
+      toast.error('Failed to retrieve tickets list.');
     } finally {
       setLoading(false);
     }
   };
 
-  // Initial load
   useEffect(() => {
     fetchDashboardStats();
     fetchAllReports();
   }, []);
 
-  // Lazy load tabs data
   useEffect(() => {
     if (activeTab === 'users' && users.length === 0) fetchAllUsers();
     if (activeTab === 'tickets' && tickets.length === 0) fetchAllTickets();
@@ -130,7 +125,7 @@ export default function AdminDashboard() {
     e.preventDefault();
     if (!selectedReport) return;
     if (!adminResponseText.trim()) {
-      toast.error('لطفاً متن پاسخ را وارد کنید.');
+      toast.error('Please enter a response text.');
       return;
     }
 
@@ -143,86 +138,86 @@ export default function AdminDashboard() {
         status: 'resolved'
       });
 
-      toast.success('پاسخ پشتیبان با موفقیت ثبت شد.');
+      toast.success('Support response registered successfully.');
       setAdminResponseText('');
       setSelectedReport(null);
       fetchAllReports();
       fetchDashboardStats();
     } catch (error) {
-      toast.error('خطا در ثبت پاسخ');
+      toast.error('Failed to register response.');
     } finally {
       setSubmittingReply(false);
     }
   };
 
   return (
-    <div className="flex h-screen bg-gray-50 font-sans overflow-hidden" dir="rtl">
+    <div className="flex h-screen bg-[#0a0a0a] text-gray-100 font-sans overflow-hidden">
       
       {/* Sidebar Navigation */}
-      <aside className="w-64 bg-gray-900 text-white hidden md:flex flex-col">
-        <div className="p-6 border-b border-gray-800">
-          <span className="text-2xl block mb-2">👑</span>
-          <h1 className="text-xl font-bold text-white">پنل مدیریت سیستم</h1>
-          <span className="text-xs text-gray-400">دسترسی ادمین / پشتیبان</span>
+      <aside className="w-64 bg-black/40 border-r border-white/10 backdrop-blur-xl hidden md:flex flex-col">
+        <div className="p-6 border-b border-white/10">
+          <span className="text-2xl block mb-2">⚡</span>
+          <h1 className="text-lg font-bold text-white">Admin Control</h1>
+          <span className="text-[10px] uppercase tracking-wider text-indigo-400 font-semibold">Management Console</span>
         </div>
 
-        <nav className="flex-1 p-4 space-y-2">
+        <nav className="flex-1 p-4 space-y-2 text-xs font-semibold">
           <button 
             onClick={() => setActiveTab('overview')}
-            className={`w-full text-right px-4 py-3 rounded-xl transition-all ${
+            className={`w-full text-left px-4 py-3 rounded-xl transition-all ${
               activeTab === 'overview' 
-                ? 'bg-blue-600 text-white font-bold' 
-                : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' 
+                : 'text-gray-400 hover:bg-white/5 hover:text-white'
             }`}
           >
-            📊 نمای کلی و آمار
+            📊 Overview & Analytics
           </button>
           
           <button 
             onClick={() => setActiveTab('tickets')}
-            className={`w-full text-right px-4 py-3 rounded-xl transition-all ${
+            className={`w-full text-left px-4 py-3 rounded-xl transition-all ${
               activeTab === 'tickets' 
-                ? 'bg-blue-600 text-white font-bold' 
-                : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' 
+                : 'text-gray-400 hover:bg-white/5 hover:text-white'
             }`}
           >
-            🎟️ مدیریت بلیت‌ها
+            🎟️ Ticket Management
           </button>
           
           <button 
             onClick={() => setActiveTab('users')}
-            className={`w-full text-right px-4 py-3 rounded-xl transition-all ${
+            className={`w-full text-left px-4 py-3 rounded-xl transition-all ${
               activeTab === 'users' 
-                ? 'bg-blue-600 text-white font-bold' 
-                : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' 
+                : 'text-gray-400 hover:bg-white/5 hover:text-white'
             }`}
           >
-            👥 لیست کاربران
+            👥 User Accounts
           </button>
           
           <button 
             onClick={() => setActiveTab('reports')}
-            className={`w-full text-right px-4 py-3 rounded-xl transition-all flex justify-between items-center ${
+            className={`w-full text-left px-4 py-3 rounded-xl transition-all flex justify-between items-center ${
               activeTab === 'reports' 
-                ? 'bg-blue-600 text-white font-bold' 
-                : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20' 
+                : 'text-gray-400 hover:bg-white/5 hover:text-white'
             }`}
           >
-            <span>🎧 پاسخ به تیکت‌ها</span>
+            <span>🎧 Support Tickets</span>
             {stats.pending_reports > 0 && (
-              <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full font-bold">
+              <span className="bg-rose-500 text-white text-[10px] px-2 py-0.5 rounded-full font-bold animate-pulse">
                 {stats.pending_reports}
               </span>
             )}
           </button>
         </nav>
 
-        <div className="p-4 border-t border-gray-800">
+        <div className="p-4 border-t border-white/10">
           <button 
             onClick={() => navigate('/dashboard')}
-            className="w-full text-right px-4 py-3 text-sm text-gray-400 hover:text-white transition-all"
+            className="w-full text-left px-4 py-3 text-xs text-gray-400 hover:text-white transition-all font-semibold"
           >
-            ← بازگشت به سایت
+            ← Exit to Platform
           </button>
         </div>
       </aside>
@@ -231,14 +226,14 @@ export default function AdminDashboard() {
       <main className="flex-1 overflow-y-auto p-8">
         
         <header className="mb-8">
-          <h2 className="text-2xl font-black text-gray-800">
-            {activeTab === 'overview' && 'آمار و گزارشات تحلیلی'}
-            {activeTab === 'tickets' && 'مدیریت بلیت‌ها و مسابقات'}
-            {activeTab === 'users' && 'کاربران سیستم'}
-            {activeTab === 'reports' && 'مدیریت تیکت‌ها و پاسخ به کاربران'}
+          <h2 className="text-2xl font-black text-white tracking-tight">
+            {activeTab === 'overview' && 'System Analytics & Overview'}
+            {activeTab === 'tickets' && 'Event Tickets Management'}
+            {activeTab === 'users' && 'Registered User Database'}
+            {activeTab === 'reports' && 'Support Ticket Resolution Center'}
           </h2>
-          <p className="text-sm text-gray-500 mt-1">
-            مدیریت یکپارچه سامانه رزرو بلیت ورزشی
+          <p className="text-xs text-gray-400 mt-1">
+            Enterprise sports reservation platform administration
           </p>
         </header>
 
@@ -246,77 +241,73 @@ export default function AdminDashboard() {
         {activeTab === 'overview' && (
           <div className="space-y-8">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-                <span className="text-sm font-bold text-gray-500">درآمد کل</span>
-                <h3 className="text-2xl font-black text-green-600 mt-2">
+              <div className="bg-white/5 backdrop-blur-xl p-6 rounded-2xl border border-white/10 shadow-xl">
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Total Revenue</span>
+                <h3 className="text-2xl font-black text-emerald-400 mt-2">
                   {Number(stats.total_revenue).toLocaleString()} 
-                  <span className="text-sm font-normal mr-1">تومان</span>
+                  <span className="text-xs font-normal text-gray-400 ml-1">Toman</span>
                 </h3>
               </div>
-              <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-                <span className="text-sm font-bold text-gray-500">بلیت‌های فروخته شده</span>
-                <h3 className="text-2xl font-black text-gray-800 mt-2">
+              <div className="bg-white/5 backdrop-blur-xl p-6 rounded-2xl border border-white/10 shadow-xl">
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Tickets Sold</span>
+                <h3 className="text-2xl font-black text-white mt-2">
                   {stats.total_tickets_sold}
                 </h3>
               </div>
-              <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-                <span className="text-sm font-bold text-gray-500">لغوی‌ها</span>
-                <h3 className="text-2xl font-black text-amber-600 mt-2">
+              <div className="bg-white/5 backdrop-blur-xl p-6 rounded-2xl border border-white/10 shadow-xl">
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Cancellations</span>
+                <h3 className="text-2xl font-black text-amber-400 mt-2">
                   {stats.total_cancellations}
                 </h3>
               </div>
-              <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-                <span className="text-sm font-bold text-gray-500">در انتظار پاسخ</span>
-                <h3 className="text-2xl font-black text-red-600 mt-2">
+              <div className="bg-white/5 backdrop-blur-xl p-6 rounded-2xl border border-white/10 shadow-xl">
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Pending Reports</span>
+                <h3 className="text-2xl font-black text-rose-400 mt-2">
                   {stats.pending_reports}
                 </h3>
               </div>
             </div>
 
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+            <div className="bg-white/5 backdrop-blur-xl rounded-3xl border border-white/10 p-6 shadow-2xl">
               <div className="flex justify-between items-center mb-6">
-                <h3 className="text-lg font-bold text-gray-800">
-                  آخرین تیکت‌های دریافتی
-                </h3>
+                <h3 className="text-base font-bold text-white">Recent Support Tickets</h3>
                 <button 
                   onClick={() => setActiveTab('reports')} 
-                  className="text-sm font-bold text-blue-600 hover:underline"
+                  className="text-xs font-bold text-indigo-400 hover:text-indigo-300"
                 >
-                  مشاهده و پاسخ‌دهی →
+                  View All →
                 </button>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full text-right text-sm text-gray-600">
-                  <thead className="bg-gray-50 text-gray-700 font-bold">
+                <table className="w-full text-left text-xs text-gray-300">
+                  <thead className="bg-white/5 text-gray-400 uppercase tracking-wider text-[10px] font-bold">
                     <tr>
-                      <th className="px-4 py-3 rounded-r-lg">شناسه</th>
-                      <th className="px-4 py-3">کاربر</th>
-                      <th className="px-4 py-3">موضوع</th>
-                      <th className="px-4 py-3 rounded-l-lg">وضعیت</th>
+                      <th className="px-4 py-3 rounded-l-xl">ID</th>
+                      <th className="px-4 py-3">User</th>
+                      <th className="px-4 py-3">Category</th>
+                      <th className="px-4 py-3 rounded-r-xl">Status</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-100">
+                  <tbody className="divide-y divide-white/5">
                     {reports.length === 0 ? (
                       <tr>
-                        <td colSpan="4" className="text-center py-6 text-gray-400">
-                          تیکتی یافت نشد.
+                        <td colSpan="4" className="text-center py-8 text-gray-500">
+                          No reports found.
                         </td>
                       </tr>
                     ) : (
                       reports.slice(0, 5).map((r) => (
-                        <tr key={r.report_id} className="hover:bg-gray-50">
+                        <tr key={r.report_id} className="hover:bg-white/[0.02]">
                           <td className="px-4 py-4 font-bold">#{r.report_id}</td>
                           <td className="px-4 py-4">{r.user_name}</td>
                           <td className="px-4 py-4">{r.category}</td>
                           <td className="px-4 py-4">
-                            <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                            <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${
                               r.status === 'resolved' || r.status === 'closed' 
-                                ? 'bg-green-100 text-green-700' 
-                                : 'bg-yellow-100 text-yellow-700'
+                                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' 
+                                : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
                             }`}>
-                              {r.status === 'resolved' || r.status === 'closed' 
-                                ? 'پاسخ داده شده' 
-                                : 'در انتظار پاسخ'}
+                              {r.status === 'resolved' || r.status === 'closed' ? 'Resolved' : 'Pending'}
                             </span>
                           </td>
                         </tr>
@@ -331,42 +322,42 @@ export default function AdminDashboard() {
 
         {/* Tab: Users List */}
         {activeTab === 'users' && (
-          <div className="bg-white rounded-2xl shadow-sm border p-6">
+          <div className="bg-white/5 backdrop-blur-xl rounded-3xl border border-white/10 p-6 shadow-2xl">
             <div className="overflow-x-auto">
-              <table className="w-full text-right text-sm text-gray-600">
-                <thead className="bg-gray-50 text-gray-700 font-bold">
+              <table className="w-full text-left text-xs text-gray-300">
+                <thead className="bg-white/5 text-gray-400 uppercase tracking-wider text-[10px] font-bold">
                   <tr>
-                    <th className="px-4 py-3">شناسه</th>
-                    <th className="px-4 py-3">نام کاربر</th>
-                    <th className="px-4 py-3">شماره تماس</th>
-                    <th className="px-4 py-3">نقش</th>
-                    <th className="px-4 py-3">ثبت نام</th>
-                    <th className="px-4 py-3">وضعیت</th>
+                    <th className="px-4 py-3 rounded-l-xl">ID</th>
+                    <th className="px-4 py-3">Full Name</th>
+                    <th className="px-4 py-3">Phone Number</th>
+                    <th className="px-4 py-3">Role</th>
+                    <th className="px-4 py-3">Joined Date</th>
+                    <th className="px-4 py-3 rounded-r-xl">Status</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-white/5">
                   {users.map((u) => (
-                    <tr key={u.user_id} className="hover:bg-gray-50">
+                    <tr key={u.user_id} className="hover:bg-white/[0.02]">
                       <td className="px-4 py-3 font-bold">#{u.user_id}</td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3 font-semibold text-white">
                         {u.first_name} {u.last_name}
                       </td>
                       <td className="px-4 py-3">{u.phone_number}</td>
                       <td className="px-4 py-3">
-                        <span className="bg-blue-50 text-blue-600 px-2 rounded-lg">
+                        <span className="bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-2.5 py-1 rounded-full font-bold uppercase text-[10px]">
                           {u.role}
                         </span>
                       </td>
                       <td className="px-4 py-3">
-                        {new Date(u.created_at).toLocaleDateString('fa-IR')}
+                        {new Date(u.created_at).toLocaleDateString('en-US')}
                       </td>
                       <td className="px-4 py-3">
-                        <span className={`px-2 py-1 rounded-full text-xs font-bold ${
+                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${
                           u.is_active 
-                            ? 'bg-green-100 text-green-700' 
-                            : 'bg-red-100 text-red-700'
+                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' 
+                            : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
                         }`}>
-                          {u.is_active ? 'فعال' : 'غیرفعال'}
+                          {u.is_active ? 'Active' : 'Deactivated'}
                         </span>
                       </td>
                     </tr>
@@ -379,42 +370,40 @@ export default function AdminDashboard() {
 
         {/* Tab: Tickets Management */}
         {activeTab === 'tickets' && (
-          <div className="bg-white rounded-2xl shadow-sm border p-6">
+          <div className="bg-white/5 backdrop-blur-xl rounded-3xl border border-white/10 p-6 shadow-2xl">
             <div className="overflow-x-auto">
-              <table className="w-full text-right text-sm text-gray-600">
-                <thead className="bg-gray-50 text-gray-700 font-bold">
+              <table className="w-full text-left text-xs text-gray-300">
+                <thead className="bg-white/5 text-gray-400 uppercase tracking-wider text-[10px] font-bold">
                   <tr>
-                    <th className="px-4 py-3">شناسه</th>
-                    <th className="px-4 py-3">تیم‌ها</th>
-                    <th className="px-4 py-3">تاریخ مسابقه</th>
-                    <th className="px-4 py-3">قیمت (تومان)</th>
-                    <th className="px-4 py-3">ظرفیت باقی‌مانده</th>
-                    <th className="px-4 py-3">وضعیت</th>
+                    <th className="px-4 py-3 rounded-l-xl">ID</th>
+                    <th className="px-4 py-3">Teams Match</th>
+                    <th className="px-4 py-3">Match Date</th>
+                    <th className="px-4 py-3">Price (Toman)</th>
+                    <th className="px-4 py-3">Remaining Capacity</th>
+                    <th className="px-4 py-3 rounded-r-xl">Status</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-white/5">
                   {tickets.map((t) => (
-                    <tr key={t.ticket_id} className="hover:bg-gray-50">
+                    <tr key={t.ticket_id} className="hover:bg-white/[0.02]">
                       <td className="px-4 py-3 font-bold">#{t.ticket_id}</td>
-                      <td className="px-4 py-3 font-bold text-gray-900">
+                      <td className="px-4 py-3 font-bold text-white">
                         {t.home_team} vs {t.away_team}
                       </td>
                       <td className="px-4 py-3">
-                        {new Date(t.match_date).toLocaleDateString('fa-IR')}
+                        {new Date(t.match_date).toLocaleDateString('en-US')}
                       </td>
-                      <td className="px-4 py-3 text-green-600 font-bold">
+                      <td className="px-4 py-3 text-emerald-400 font-bold">
                         {Number(t.price).toLocaleString()}
                       </td>
+                      <td className="px-4 py-3">{t.remaining_capacity}</td>
                       <td className="px-4 py-3">
-                        {t.remaining_capacity}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`px-2 py-1 rounded-full text-xs font-bold ${
+                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${
                           t.is_active 
-                            ? 'bg-green-100 text-green-700' 
-                            : 'bg-gray-100 text-gray-500'
+                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' 
+                            : 'bg-white/5 text-gray-400 border-white/10'
                         }`}>
-                          {t.is_active ? 'فروش باز' : 'بسته شده'}
+                          {t.is_active ? 'Active' : 'Closed'}
                         </span>
                       </td>
                     </tr>
@@ -425,28 +414,20 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* Tab: Support & Reports Management (Restored Original Layout) */}
+        {/* Tab: Support & Reports Management */}
         {activeTab === 'reports' && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             
-            {/* Reports List Column (Appears on the right in RTL) */}
-            <div className="lg:col-span-1 bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4 max-h-[700px] overflow-y-auto">
-              <h3 className="text-lg font-bold text-gray-800 mb-4">
-                لیست تیکت‌ها
-              </h3>
+            <div className="lg:col-span-1 bg-white/5 backdrop-blur-xl p-6 rounded-3xl border border-white/10 space-y-3 max-h-[700px] overflow-y-auto shadow-2xl">
+              <h3 className="text-base font-bold text-white mb-4">Support Queue</h3>
               {loading ? (
-                <div className="text-center py-8 text-gray-500">
-                  در حال بارگذاری تیکت‌ها...
-                </div>
+                <div className="text-center py-8 text-gray-500 text-xs animate-pulse">Loading tickets...</div>
               ) : reports.length === 0 ? (
-                <div className="text-center py-8 text-gray-400 text-sm">
-                  هیچ تیکتی ثبت نشده است.
-                </div>
+                <div className="text-center py-8 text-gray-500 text-xs">No reports submitted.</div>
               ) : (
                 reports.map((report) => {
                   const rId = report.report_id || report.id;
-                  const isSelected = selectedReport && 
-                    (selectedReport.report_id === rId);
+                  const isSelected = selectedReport && (selectedReport.report_id === rId);
                   
                   return (
                     <div 
@@ -455,36 +436,28 @@ export default function AdminDashboard() {
                         setSelectedReport(report);
                         setAdminResponseText(report.admin_response || '');
                       }}
-                      className={`p-4 rounded-xl border transition-all cursor-pointer ${
+                      className={`p-4 rounded-2xl border transition-all cursor-pointer ${
                         isSelected 
-                          ? 'border-blue-500 bg-blue-50 shadow-sm' 
-                          : 'border-gray-100 bg-gray-50 hover:bg-white'
+                          ? 'border-indigo-500 bg-indigo-500/10 shadow-lg' 
+                          : 'border-white/5 bg-black/30 hover:bg-white/[0.04]'
                       }`}
                     >
                       <div className="flex justify-between items-center mb-2">
-                        <span className="font-bold text-gray-900 text-sm">
-                          {report.category || 'تیکت پشتیبانی'}
+                        <span className="font-bold text-white text-xs">
+                          {report.category || 'Support Ticket'}
                         </span>
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                        <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold border ${
                           report.status === 'resolved' || report.status === 'closed' 
-                            ? 'bg-green-100 text-green-700' 
-                            : 'bg-yellow-100 text-yellow-700'
+                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' 
+                            : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
                         }`}>
-                          {report.status === 'resolved' || report.status === 'closed' 
-                            ? 'پاسخ داده شده' 
-                            : 'در انتظار'}
+                          {report.status === 'resolved' || report.status === 'closed' ? 'Resolved' : 'Pending'}
                         </span>
                       </div>
-                      <p className="text-xs text-gray-500 line-clamp-2">
-                        {report.report_text || 'بدون متن'}
-                      </p>
-                      <div className="mt-2 text-[10px] text-gray-400 flex justify-between">
-                        <span>تیکت #{rId}</span>
-                        <span>
-                          {report.created_at 
-                            ? new Date(report.created_at).toLocaleDateString('fa-IR') 
-                            : ''}
-                        </span>
+                      <p className="text-xs text-gray-400 line-clamp-2">{report.report_text || 'No text'}</p>
+                      <div className="mt-2 text-[10px] text-gray-500 flex justify-between">
+                        <span>Ticket #{rId}</span>
+                        <span>{report.created_at ? new Date(report.created_at).toLocaleDateString('en-US') : ''}</span>
                       </div>
                     </div>
                   );
@@ -492,75 +465,62 @@ export default function AdminDashboard() {
               )}
             </div>
 
-            {/* Selected Report Details & Reply Form Column (Left side) */}
-            <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+            <div className="lg:col-span-2 bg-white/5 backdrop-blur-xl p-8 rounded-3xl border border-white/10 shadow-2xl">
               {selectedReport ? (
                 <div className="space-y-6">
-                  
-                  {/* Header */}
-                  <div className="border-b border-gray-100 pb-4 flex justify-between items-start">
+                  <div className="border-b border-white/10 pb-4 flex justify-between items-start">
                     <div>
-                      <h3 className="text-xl font-bold text-gray-900 mb-1">
-                        {selectedReport.category || 'تیکت پشتیبانی'}
+                      <h3 className="text-xl font-bold text-white mb-1">
+                        {selectedReport.category || 'Support Ticket'}
                       </h3>
                       <span className="text-xs text-gray-400">
-                        شماره تیکت: #{selectedReport.report_id || selectedReport.id} 
-                        {selectedReport.user_name ? ` | کاربر: ${selectedReport.user_name}` : ''}
+                        Ticket ID: #{selectedReport.report_id || selectedReport.id} 
+                        {selectedReport.user_name ? ` | User: ${selectedReport.user_name}` : ''}
                       </span>
                     </div>
-                    <span className={`text-xs px-3 py-1 rounded-full font-bold ${
+                    <span className={`text-xs px-3 py-1 rounded-full font-bold border ${
                       selectedReport.status === 'resolved' || selectedReport.status === 'closed' 
-                        ? 'bg-green-100 text-green-700' 
-                        : 'bg-yellow-100 text-yellow-700'
+                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' 
+                        : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
                     }`}>
-                      {selectedReport.status === 'resolved' || selectedReport.status === 'closed' 
-                        ? 'پاسخ داده شده' 
-                        : 'در انتظار پاسخ شما'}
+                      {selectedReport.status === 'resolved' || selectedReport.status === 'closed' ? 'Resolved' : 'Pending Action'}
                     </span>
                   </div>
 
-                  {/* User Message Display */}
-                  <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 space-y-2">
-                    <span className="text-xs font-bold text-gray-500 block">
-                      💬 پیام کاربر:
-                    </span>
-                    <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-line">
-                      {selectedReport.report_text || 'بدون متن'}
+                  <div className="bg-black/40 p-4 rounded-2xl border border-white/5 space-y-2">
+                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">User Message:</span>
+                    <p className="text-xs text-gray-200 leading-relaxed whitespace-pre-line">
+                      {selectedReport.report_text || 'No message provided'}
                     </p>
                   </div>
 
-                  {/* Reply Form */}
                   <form onSubmit={handleReplySubmit} className="space-y-4 pt-2">
                     <div>
-                      <label className="block text-sm font-bold text-gray-700 mb-2">
-                        ارسال پاسخ پشتیبان به کاربر:
+                      <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">
+                        Admin Response:
                       </label>
                       <textarea
                         rows="5"
-                        placeholder="متن پاسخ خود را اینجا بنویسید..."
+                        placeholder="Type your official response here..."
                         value={adminResponseText}
                         onChange={(e) => setAdminResponseText(e.target.value)}
-                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm resize-none"
+                        className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-indigo-500 text-xs text-white placeholder-gray-500 resize-none"
                       />
                     </div>
 
                     <button
                       type="submit"
                       disabled={submittingReply}
-                      className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-xl transition-all shadow-md hover:shadow-lg disabled:opacity-50"
+                      className="px-6 py-3.5 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg shadow-indigo-500/20 disabled:opacity-50"
                     >
-                      {submittingReply 
-                        ? 'در حال ثبت پاسخ...' 
-                        : 'ارسال و ثبت پاسخ پشتیبان'}
+                      {submittingReply ? 'Registering Response...' : 'Submit Support Reply →'}
                     </button>
                   </form>
                 </div>
               ) : (
-                <div className="text-center py-32 text-gray-400">
+                <div className="text-center py-32 text-gray-500">
                   <span className="text-5xl block mb-3">👈</span>
-                  <p className="text-sm font-medium">
-                    لطفاً یک تیکت را از منوی سمت راست انتخاب کنید.
-                  </p>
+                  <p className="text-xs font-medium">Select a support ticket from the sidebar queue to view details.</p>
                 </div>
               )}
             </div>

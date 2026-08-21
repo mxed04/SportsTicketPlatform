@@ -31,7 +31,6 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState(null);
 
-  // Search and Filter States
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSport, setSelectedSport] = useState('all');
 
@@ -39,18 +38,16 @@ export default function Dashboard() {
     setUserRole(getUserRole());
   }, []);
 
-  // Fetch Tickets / Live Search from ElasticSearch
+  // Fetch tickets via ElasticSearch endpoint
   useEffect(() => {
     const fetchTickets = async () => {
       setLoading(true);
       try {
-        // 🔴 FIX: Always route through the ElasticSearch endpoint
-        const endpoint = '/tickets/search'; 
+        const endpoint = '/tickets/search';
         const params = new URLSearchParams();
 
         if (searchQuery.trim()) {
-          // نکته: اگر بک‌اند شما کلمه دیگری مثل 'keyword' می‌خواهد، 'q' را تغییر دهید
-          params.append('q', searchQuery.trim()); 
+          params.append('q', searchQuery.trim());
         }
 
         if (selectedSport !== 'all') {
@@ -70,7 +67,6 @@ export default function Dashboard() {
       }
     };
 
-    // Debounce search inputs by 500ms
     const timer = setTimeout(() => {
       fetchTickets();
     }, 500);
@@ -87,7 +83,6 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-gray-100 font-sans pb-16">
-      {/* Top Navbar */}
       <header className="bg-white/5 border-b border-white/10 sticky top-0 z-30 backdrop-blur-md">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -131,9 +126,7 @@ export default function Dashboard() {
         </div>
       </header>
 
-      {/* Main Container */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8">
-        {/* Hero & Search Header */}
         <div className="mb-10 text-center max-w-3xl mx-auto">
           <h2 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight mb-3">
             Find & Reserve <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-blue-400">Live Sports Tickets</span>
@@ -142,12 +135,11 @@ export default function Dashboard() {
             Sub-second ElasticSearch query engine with real-time capacity monitoring and dynamic pricing.
           </p>
 
-          {/* Search Controls */}
           <div className="flex flex-col sm:flex-row gap-3 bg-white/5 border border-white/10 p-2.5 rounded-2xl backdrop-blur-xl shadow-2xl">
             <div className="relative flex-1">
               <input
                 type="text"
-                placeholder="Search teams, venues, or cities (e.g. Real Madrid, Bernabeu)..."
+                placeholder="Search teams, venues, or cities..."
                 className="w-full pl-11 pr-4 py-3 bg-transparent text-sm text-white placeholder-gray-500 focus:outline-none"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -155,7 +147,6 @@ export default function Dashboard() {
               <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 text-lg">🔍</span>
             </div>
 
-            {/* Sport Category Filter */}
             <div className="flex bg-black/40 p-1 rounded-xl border border-white/5 gap-1">
               {['all', 'football', 'basketball', 'volleyball'].map((sport) => (
                 <button
@@ -174,7 +165,6 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Tickets Grid */}
         {loading ? (
           <div className="text-center py-20 text-gray-500 animate-pulse text-sm">
             Searching ElasticSearch database...
@@ -203,7 +193,6 @@ export default function Dashboard() {
                   key={ticketId || index}
                   className="bg-white/5 hover:bg-white/[0.08] border border-white/10 hover:border-indigo-500/50 rounded-3xl p-6 transition-all duration-300 shadow-xl group flex flex-col justify-between relative overflow-hidden"
                 >
-                  {/* Top Badge Row */}
                   <div className="flex justify-between items-center mb-5">
                     <span className="text-[10px] font-bold uppercase tracking-wider px-3 py-1 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-full">
                       ⚽ {sport}
@@ -215,7 +204,6 @@ export default function Dashboard() {
                     )}
                   </div>
 
-                  {/* Match Teams Title */}
                   <div className="mb-6">
                     <h3 className="text-xl font-extrabold text-white group-hover:text-indigo-300 transition-colors">
                       {homeTeam} <span className="text-xs text-gray-500 font-normal px-1">vs</span> {awayTeam}
@@ -225,7 +213,6 @@ export default function Dashboard() {
                     </p>
                   </div>
 
-                  {/* Details Card */}
                   <div className="bg-black/30 rounded-2xl p-4 border border-white/5 text-xs text-gray-300 space-y-2 mb-6">
                     <div className="flex justify-between">
                       <span className="text-gray-500">Date:</span>
@@ -245,7 +232,6 @@ export default function Dashboard() {
                     </div>
                   </div>
 
-                  {/* Action Button */}
                   <button
                     onClick={() => navigate(`/tickets/${ticketId}`)}
                     className="w-full bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white font-bold py-3.5 rounded-xl transition-all shadow-lg shadow-indigo-500/20 text-xs uppercase tracking-wider"
