@@ -2,7 +2,6 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from app.database import get_db_cursor
 from app.routes.reservations import get_current_user_id
 
-# 🛡️ Removed 'AdminReportResponse' to bypass strict Pydantic validation
 from app.schemas.admin import (
     AdminManageRequest,
     AdminReportReplyRequest,
@@ -38,42 +37,37 @@ def verify_admin_or_support_role(
 def get_dashboard_stats(
     user_id: int = Depends(verify_admin_or_support_role),
 ):
-    """Fetches high-level analytics and counts for the admin dashboard."""
+    """
+    Fetches high-level analytics for the admin dashboard.
+    Utilizes the Materialized View for O(1) read performance.
+    """
     try:
         with get_db_cursor() as cursor:
-            # 1. Total Revenue from successful payments
-            cursor.execute(
-                "SELECT COALESCE(SUM(amount), 0) AS total_revenue "
-                "FROM payments WHERE status = 'successful';"
-            )
-            revenue = cursor.fetchone()["total_revenue"]
+            # 1. Refresh the materialized view concurrently (No table locks)
+            cursor.execute("SELECT refresh_admin_dashboard_mview();")
 
-            # 2. Total Tickets Sold (paid status)
+            # 2. Fetch the pre-calculated aggregated statistics
             cursor.execute(
-                "SELECT COUNT(*) AS total_tickets_sold "
-                "FROM reservations WHERE status = 'paid';"
+                "SELECT total_revenue, total_tickets_sold, "
+                "total_cancellations, pending_reports "
+                "FROM admin_dashboard_mview;"
             )
-            tickets_sold = cursor.fetchone()["total_tickets_sold"]
+            stats = cursor.fetchone()
 
-            # 3. Total Cancellations
-            cursor.execute(
-                "SELECT COUNT(*) AS total_cancellations "
-                "FROM reservations WHERE status = 'cancelled';"
-            )
-            cancellations = cursor.fetchone()["total_cancellations"]
-
-            # 4. Pending Reports Count
-            cursor.execute(
-                "SELECT COUNT(*) AS pending_reports FROM reports "
-                "WHERE status IN ('under_review', 'pending');"
-            )
-            pending_reports = cursor.fetchone()["pending_reports"]
+            # Fallback to 0 if the view is completely empty
+            if not stats:
+                return {
+                    "total_revenue": 0.0,
+                    "total_tickets_sold": 0,
+                    "total_cancellations": 0,
+                    "pending_reports": 0,
+                }
 
             return {
-                "total_revenue": float(revenue),
-                "total_tickets_sold": tickets_sold,
-                "total_cancellations": cancellations,
-                "pending_reports": pending_reports,
+                "total_revenue": float(stats["total_revenue"] or 0),
+                "total_tickets_sold": stats["total_tickets_sold"] or 0,
+                "total_cancellations": stats["total_cancellations"] or 0,
+                "pending_reports": stats["pending_reports"] or 0,
             }
     except Exception as e:
         raise HTTPException(
@@ -84,7 +78,7 @@ def get_dashboard_stats(
 
 @router.get(
     "/reports",
-    response_model=list[dict],  # 🛡️ FIXED: Bypass strict schema validation
+    response_model=list[dict],  # Bypass strict schema for NULL responses
     status_code=status.HTTP_200_OK,
 )
 def get_all_reports_for_admin(
@@ -111,7 +105,6 @@ def get_all_reports_for_admin(
                 ORDER BY r.created_at DESC;
                 """
             )
-            # Returns raw dict list, preventing NULL validation crashes
             return cursor.fetchall()
     except Exception as e:
         raise HTTPException(
@@ -246,7 +239,7 @@ def get_all_users(
 def get_all_tickets_admin(
     user_id: int = Depends(verify_admin_or_support_role),
 ):
-    """Retrieves all sports events and tickets for administrative viewing."""
+    """Retrieves all sports events and tickets for admin viewing."""
     try:
         with get_db_cursor() as cursor:
             cursor.execute(
