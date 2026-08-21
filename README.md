@@ -4,17 +4,18 @@
 
 ### Sports Event Ticket Booking & Reservation Platform
 
-_A fully normalized relational database and a raw-SQL FastAPI backend for a high-traffic sports ticketing system — football, volleyball, and basketball events._
+_A fully normalized relational database, a raw-SQL FastAPI backend, and a React SPA client for a high-traffic sports ticketing system — football, volleyball, and basketball events._
 
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16%2B-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![Normalization](https://img.shields.io/badge/Normalization-3NF-2E8B57?style=for-the-badge)](#phase-1)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.111.0-009688?style=for-the-badge&logo=fastapi&logoColor=white)](#phase-3)
 [![Redis](https://img.shields.io/badge/Redis-5.0.6-DC382D?style=for-the-badge&logo=redis&logoColor=white)](#phase-3)
 [![Celery](https://img.shields.io/badge/Celery-Task%20Queue-37814A?style=for-the-badge)](#phase-3)
-[![React](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black)](#phase-4)
+[![ElasticSearch](https://img.shields.io/badge/ElasticSearch-8.11.3-005571?style=for-the-badge&logo=elasticsearch&logoColor=white)](#phase-4)
+[![React](https://img.shields.io/badge/React-19-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)](#phase-4)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=for-the-badge&logo=docker&logoColor=white)](docker-compose.yml)
 [![CI](https://img.shields.io/github/actions/workflow/status/MohammafAfra83/SportsTicketPlatform/ci.yml?branch=main&style=for-the-badge&label=CI&logo=githubactions&logoColor=white)](.github/workflows/ci.yml)
-[![Phase](https://img.shields.io/badge/Current%20Phase-4%20of%204%20(In%20Progress)-orange?style=for-the-badge)](#-project-status--roadmap)
+[![Phase](https://img.shields.io/badge/Current%20Phase-4%20of%204%20Complete-brightgreen?style=for-the-badge)](#-project-status--roadmap)
 [![License](https://img.shields.io/badge/License-Academic%20Project-lightgrey?style=for-the-badge)](#-author--license)
 
 [Project Status](#-project-status--roadmap) •
@@ -26,8 +27,7 @@ _A fully normalized relational database and a raw-SQL FastAPI backend for a high
 [Phase 3](#phase-3) •
 [Phase 4](#phase-4) •
 [CI/CD](#-cicd-pipeline) •
-[Getting Started](#-getting-started) •
-[Upcoming Phases](#-project-roadmap--upcoming-phases)
+[Getting Started](#-getting-started)
 
 </div>
 
@@ -51,21 +51,23 @@ This is a **4-phase project**. This README grows **incrementally** — each phas
 | **1** | Database Design — ER Diagram & Schema (3NF)                | ✅ **Complete** |
 | **2** | Data Seeding, Analytical Queries & Stored Procedures       | ✅ **Complete** |
 | **3** | Backend Implementation — REST API (No ORM) & Redis Caching | ✅ **Complete** |
-| **4** | Client Application & ElasticSearch Search Engine           | 🔶 **In Progress** |
+| **4** | Client Application & ElasticSearch Search Engine           | ✅ **Complete** |
 
-> 🔶 **Phase 4 status detail:** the client application (a React + Vite SPA covering auth, ticket search, reservations, payments, a user panel, and an admin console) is implemented and documented in the [Phase 4](#phase-4) section below. The ElasticSearch indexing/sync layer on the backend side of this phase was not part of the files reviewed for that section and remains unverified — see [Phase 4 → Known Implementation Notes](#phase-4) for the full breakdown.
+**🎉 All 4 core phases are complete.** See [Phase 4](#phase-4) below for the React client and ElasticSearch integration, including a source-verified list of what changed (and what regressed) relative to Phase 3.
 
-**🌟 Selected Bonus (Extra-Credit) Phase:**
+**🌟 Selected Bonus (Extra-Credit) Features:**
 
 | Feature                                                  | Associated Phase |     Status     |
 | --------------------------------------------------------- | :--------------: | :------------: |
 | CI/CD automation via GitHub Actions                      |     Phase 1      | ✅ Implemented |
 | Indexing & query performance optimization                |     Phase 2      | ✅ Implemented |
 | Dockerization of the database tier                       |   Bonus-phase    | ✅ Implemented |
-| Full-stack Dockerization (backend API + Celery + Redis)  |     Phase 3      | ✅ Implemented |
-| Rate limiting, idempotent payments, QR tickets, waitlist |     Phase 3      | ✅ Implemented |
+| Full-stack Dockerization (backend API + Celery + Redis)  |     Phase 3      | ⚠️ Partially superseded — see [Phase 4](#phase-4) |
+| Rate limiting, idempotent payments, QR tickets, waitlist |     Phase 3      | ⚠️ Idempotency removed in Phase 4 — see below |
+| Audit-log triggers & materialized view for admin stats   |     Phase 4      | ✅ Implemented (⚠️ not wired into `init.sh` — see [Phase 4](#phase-4)) |
+| React 19 SPA client + ElasticSearch-backed ticket search |     Phase 4      | ✅ Implemented |
 
-> ℹ️ Dockerization is tracked as a **cross-phase bonus**, not one of the 4 core phases. As of Phase 3, the **entire stack** — PostgreSQL, Redis, the FastAPI backend, and the Celery worker — is fully containerized via a single `docker-compose.yml` (4 services) and verified end-to-end in CI on every push.
+> ℹ️ Dockerization is tracked as a **cross-phase bonus**, not one of the 4 core phases. As of **Phase 4**, `docker-compose.yml` defines 5 services — `postgres_db`, `redis`, `elasticsearch`, `api`, and `frontend` — but **`celery_worker` is no longer one of them** (it was present in Phase 3's compose file). See [Phase 4 → Known Implementation Notes](#phase-4) for what that means in practice.
 
 ---
 
@@ -74,10 +76,10 @@ This is a **4-phase project**. This README grows **incrementally** — each phas
 **SportsTicketPlatform** models the complete lifecycle of a sports-event ticket transaction:
 
 ```
-User Registration → Browse Tickets → Create Reservation → Complete Payment → (Optional) Support Report
+User Registration → Browse Tickets (ElasticSearch) → Create Reservation → Complete Payment → (Optional) Support Report
 ```
 
-The project is delivered across **4 phases** — database design, data/query layer, backend API, and client + search engine — with Dockerization as a separate, cross-phase bonus. As of **Phase 3**, the project delivers a fully normalized **3NF** PostgreSQL schema, a complete seed dataset, a 22-query analytical/maintenance layer, 8 reusable PL/pgSQL functions, a two-tier indexing strategy, and a full **FastAPI** REST backend — raw SQL (no ORM), JWT auth, Redis caching/queues, and Celery background jobs — all fully containerized and CI-verified end-to-end. **Phase 4** adds a React + Vite single-page client covering the full user journey — auth, search, reservation, payment, and support — plus an admin console; the planned ElasticSearch search-backend migration for this phase has not yet been verified against source (see [Phase 4](#phase-4)).
+The project was delivered across **4 phases** — database design, data/query layer, backend API, and client + search engine — with Dockerization as a separate, cross-phase bonus. As of **Phase 4**, the project delivers a fully normalized **3NF** PostgreSQL schema, a complete seed dataset, a 22-query analytical/maintenance layer, 8 reusable PL/pgSQL functions plus an audit-logging trigger and a materialized view, a two-tier indexing strategy, a 25-endpoint **FastAPI** REST backend (raw SQL, no ORM, JWT auth, Redis, Celery), an **ElasticSearch**-backed ticket search engine, and a **React 19 + Vite** SPA client covering the full user and admin journey.
 
 |                            |                                                                            |
 | -------------------------- | -------------------------------------------------------------------------- |
@@ -85,12 +87,15 @@ The project is delivered across **4 phases** — database design, data/query lay
 | 🧱 **Normalization Level** | Third Normal Form (3NF)                                                    |
 | 🏟️ **Domain**              | Sports Event Ticketing (Football · Volleyball · Basketball)                |
 | 🏗️ **Architecture**        | Domain-Driven Partitioning (base ticket + sport-specific extension tables) |
-| ⚡ **Backend**              | FastAPI, raw SQL via pooled `psycopg2` (no ORM)                            |
-| 🖥️ **Client**              | React 19 + Vite SPA, Tailwind CSS (Phase 4)                                |
-| 🧠 **Cache / Queue**       | Redis (cache-aside search, OTPs, waitlists, idempotency) + Celery workers  |
+| ⚡ **Backend**              | FastAPI, raw SQL via pooled `psycopg2` (no ORM) — 25 endpoints             |
+| 🔍 **Search**               | ElasticSearch 8.11.3 — fuzzy multi-field search with edge-ngram autocomplete mapping |
+| 🧠 **Cache / Queue**       | Redis (OTPs, waitlists, ticket-detail cache) + Celery task definitions*    |
+| 🎨 **Client**               | React 19 + Vite SPA, Tailwind CSS, Persian/RTL                             |
 | 🔑 **Auth**                | JWT (`HS256`) + `bcrypt` password hashing                                  |
-| 🐳 **Containerization**    | Docker Compose — one command for the full stack (DB, Redis, API, worker)   |
-| 🔁 **CI/CD**               | GitHub Actions — builds and verifies the real Docker Compose stack, incl. `pytest` |
+| 🐳 **Containerization**    | Docker Compose — 5 services (DB, Redis, ElasticSearch, API, Frontend)*     |
+| 🔁 **CI/CD**               | GitHub Actions — schema/query validation + isolated image builds*         |
+
+<sub>* See [Phase 4 → Known Implementation Notes](#phase-4) — the Celery worker container and the Phase 3 full-stack CI pipeline were both scaled back in this phase.</sub>
 
 ---
 
@@ -103,7 +108,7 @@ The project is delivered across **4 phases** — database design, data/query lay
 SportsTicketPlatform/
 ├── .github/
 │   └── workflows/
-│       └── ci.yml                        # Full-stack CI: builds DB+Redis+API+worker via Compose, runs pytest
+│       └── ci.yml                        # 2-job CI: DB script validation + isolated backend/frontend image builds
 ├── backend/
 │   ├── app/
 │   │   ├── core/
@@ -114,19 +119,37 @@ SportsTicketPlatform/
 │   │   │   └── reservation_tasks.py       # Celery tasks: payment reminder (13m), auto-cancellation (15m)
 │   │   ├── utils/
 │   │   │   └── email_sender.py            # Real SMTP OTP sender (implemented, not wired into any route)
-│   │   ├── config.py                      # pydantic-settings — all env-driven configuration
+│   │   ├── config.py                      # pydantic-settings — most env-driven configuration (not ES, see Phase 4)
 │   │   ├── database.py                    # psycopg2 ThreadedConnectionPool + get_db_cursor()
+│   │   ├── es_client.py                   # 🆕 ElasticSearch client, index mapping, index/update/delete helpers
+│   │   ├── sync_es.py                     # 🆕 One-off bulk sync script: Postgres → ElasticSearch (`python -m app.sync_es`)
 │   │   ├── main.py                        # FastAPI app, CORS, rate-limiter wiring, health check
 │   │   ├── rate_limiter.py                # slowapi Limiter (in-memory, keyed by client IP)
-│   │   ├── redis_client.py                # OTP store, search cache, waitlist queues, idempotency cache
+│   │   ├── redis_client.py                # OTP store, waitlist queues, ticket-detail cache
 │   │   └── security.py                    # JWT signing (PyJWT) + bcrypt hashing (Passlib)
 │   ├── postman/
 │   │   ├── openapi.json                   # Exported OpenAPI 3.1 spec — importable as a Postman collection
 │   │   └── Local_Environment.json         # Postman environment (base_url, token)
-│   ├── tests/                             # pytest suite (FastAPI TestClient)
-│   ├── .env.example                       # Template for backend/.env
+│   ├── tests/                             # pytest suite (FastAPI TestClient) — not run in CI as of Phase 4
+│   ├── .env.example                       # Template for backend/.env (ELASTICSEARCH_URL not listed — see Phase 4)
 │   ├── Dockerfile
 │   └── requirements.txt
+├── frontend/                               # 🆕 React 19 + Vite SPA (Phase 4)
+│   ├── src/
+│   │   ├── api.js                         # Single axios instance, hardcoded baseURL, bearer-token interceptor
+│   │   ├── App.jsx                        # Router, PrivateRoute/AdminRoute guards
+│   │   ├── main.jsx
+│   │   └── pages/
+│   │       ├── Login.jsx                  # Login / signup / OTP forgot-password (3-in-1)
+│   │       ├── Dashboard.jsx              # ElasticSearch-backed ticket search & browse
+│   │       ├── TicketDetail.jsx           # Ticket detail + reserve action
+│   │       ├── PaymentGateway.jsx         # ✅ current payment flow (routed)
+│   │       ├── Payment.jsx                # ⚠️ legacy payment flow (dead code, unrouted)
+│   │       ├── Profile.jsx                # Bookings (incl. QR code + tracking code) + account settings
+│   │       ├── Support.jsx                # User-facing support tickets
+│   │       └── AdminDashboard.jsx         # Admin/support console (4 tabs)
+│   ├── Dockerfile                         # Multi-stage: node:20-alpine build → nginx:alpine serve
+│   └── package.json
 ├── database/
 │   ├── erd/
 │   │   ├── erd_diagram.drawio             # Editable ERD Source File (Draw.io)
@@ -139,31 +162,9 @@ SportsTicketPlatform/
 │   │   ├── seed.sql                       # Seed data with dynamic timestamps
 │   │   ├── indexes.sql                    # B-Tree & GIN Trigram indexes (also enables pg_trgm)
 │   │   ├── procedures.sql                 # 8 PL/pgSQL stored functions
-│   │   └── queries.sql                    # 22 analytical & maintenance queries
-│   └── init.sh                            # 5-step automated bootstrap (run inside the container)
-├── frontend/
-│   ├── Dockerfile                         # Multi-stage build (node → nginx), SPA fallback routing
-│   ├── index.html                         # lang="fa" dir="rtl", mounts #root
-│   ├── package.json
-│   ├── vite.config.js
-│   ├── tailwind.config.js
-│   ├── postcss.config.js
-│   ├── eslint.config.js
-│   └── src/
-│       ├── main.jsx                       # ReactDOM root, wraps <App/> in StrictMode
-│       ├── App.jsx                        # Router, route guards (PrivateRoute/AdminRoute), route table
-│       ├── api.js                         # Single axios instance + bearer-token request interceptor
-│       ├── index.css                      # Tailwind directives + base styles
-│       ├── assets/                        # hero.png, react.svg, vite.svg
-│       └── pages/
-│           ├── Login.jsx                   # Login / signup / forgot-password (OTP-based, 3-in-1)
-│           ├── Dashboard.jsx                # Ticket search & browse (debounced, ElasticSearch-labeled)
-│           ├── TicketDetail.jsx             # Single ticket view + reserve action
-│           ├── PaymentGateway.jsx           # ✅ Current payment flow (routed)
-│           ├── Payment.jsx                  # ⚠️ Legacy payment flow (dead code, unrouted)
-│           ├── Profile.jsx                  # Booking history + account settings
-│           ├── Support.jsx                  # User-facing support tickets
-│           └── AdminDashboard.jsx           # Admin/support console (4 tabs)
+│   │   ├── queries.sql                    # 22 analytical & maintenance queries
+│   │   └── advanced.sql                   # 🆕 Audit-log trigger + admin_dashboard_mview (not run by init.sh — see Phase 4)
+│   └── init.sh                            # 5-step automated bootstrap — still 5 steps; does not run advanced.sql
 ├── docs/
 │   ├── Phase1/
 │   │   └── Phase1_Report.pdf              # Phase 1 technical & normalization report
@@ -173,8 +174,8 @@ SportsTicketPlatform/
 │   │   ├── Phase3_Backend_Implementation.md         # Full API reference, setup guide, testing & changelog
 │   │   └── Database_Sync_Cache_Invalidation_Strategy.md  # Cache-aside patterns & Redis key lifecycles
 │   └── Phase4/
-│       └── Phase4_Frontend_Client_Implementation.md # Client architecture, routing, and full UI↔API contract
-├── docker-compose.yml                     # 4 services: postgres_db, redis, api, celery_worker
+│       └── Phase4_frontend_client_implementation.md # 🆕 Frontend-only deep-dive: routing, API contract, 13 gaps
+├── docker-compose.yml                     # 5 services: postgres_db, redis, elasticsearch, api, frontend (no celery_worker)
 ├── .gitignore
 └── README.md                              # Main repository documentation
 ```
@@ -304,8 +305,8 @@ All tables strictly satisfy the criteria for **Third Normal Form (3NF)**:
 
 <br>
 
-| Entity               | Key Attributes                                                                                                                                          | Relationships                                                                                            | Target Cardinality                                                                              |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Entity               | Key Attributes                                                                                                                                          | Relationships                                                                                            | Target Cardinality                                                                               |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
 | `users`              | `user_id` (PK), `first_name`, `last_name`, `phone_number`, `email`, `password_hash`, `role`, `city`, `is_active`, `created_at`                          | Makes Reservation • Billed via Payment • Submits Report • Cancels Reservation (as support)               | 1:N → `reservations` • 1:N → `payments` • 1:N → `reports` • 1:N → `reservations` (as canceller) |
 | `tickets`            | `ticket_id` (PK), `home_team`, `away_team`, `sport_type`, `ticket_tier`, `organizer`, `venue_name`, `city`, `match_date`, `price`, `remaining_capacity` | Booked In • Has Football/Volleyball/Basketball Details • Referenced By Report                            | 1:N → `reservations` • 1:1 → each `*_details` • 1:N → `reports`                                 |
 | `football_details`   | `ticket_id` (PK/FK), `league_name`, `stadium_name`, `stand_section`, `row_number`, `seat_number`, `ticket_type`, `amenities`                            | Extension of Base Ticket                                                                                 | 1:1 → `tickets`                                                                                 |
@@ -345,7 +346,7 @@ All tables strictly satisfy the criteria for **Third Normal Form (3NF)**:
 ### 🌱 Seed Data (`seed.sql`)
 
 | Entity                                                           | Records Seeded | Notes                                               |
-| ---------------------------------------------------------------- | :------------: | ---------------------------------------------------- |
+| ------------------------------------------------------------------ | :------------: | ------------------------------------------------------ |
 | `users`                                                          |       10       | 8 audience, 2 support                               |
 | `tickets`                                                        |       30       | 10 mixed + 6 football + 7 volleyball + 7 basketball |
 | `football_details` / `volleyball_details` / `basketball_details` |    10 each     | One row per ticket of that sport                    |
@@ -391,7 +392,7 @@ The query suite is split into two parts: safe, read-only analytics, and explicit
 |  7  | `get_cancelled_tickets_by_sport`          | `p_sport_type sport_type_enum`  | Cancelled reservations for one sport, newest first            |
 |  8  | `get_users_with_most_reports_by_category` | `p_category VARCHAR`            | Users most frequently reported in a given category            |
 
-> 🔎 **`search_tickets_by_keyword`** is the most structurally complex function: it `LEFT JOIN`s across **six tables** — `tickets`, `reservations`, `users`, `football_details`, `volleyball_details`, `basketball_details` — so a ticket with no reservation yet, or without a matching sport-specific row, is still returned instead of being silently excluded by an inner join.
+> 🔎 **`search_tickets_by_keyword`** is the most structurally complex function: it `LEFT JOIN`s across **six tables** — `tickets`, `reservations`, `users`, `football_details`, `volleyball_details`, `basketball_details` — so a ticket with no reservation yet, or without a matching sport-specific row, is still returned instead of being silently excluded by an inner join. Note: as of Phase 4, live ticket search in the API no longer calls this function — see [Phase 4](#phase-4).
 
 📄 Full breakdown: [`docs/Phase2/Phase2_Report.pdf`](docs/Phase2/Phase2_Report.pdf)
 
@@ -402,7 +403,7 @@ The query suite is split into two parts: safe, read-only analytics, and explicit
 11 indexes now cover the schema — 7 conventional B-Tree indexes plus 4 GIN Trigram indexes (via `CREATE EXTENSION pg_trgm`) for fast partial-text `ILIKE` search:
 
 | Type        | Index                          | Target Column(s)                | Optimizes                            |
-| ----------- | -------------------------------- | ---------------------------------- | --------------------------------------- |
+| ----------- | ------------------------------- | --------------------------------- | --------------------------------------- |
 | B-Tree      | `idx_tickets_sport_city`       | `tickets(sport_type, city)`     | Combined sport + city filtering      |
 | B-Tree      | `idx_tickets_match_date`       | `tickets(match_date ASC)`       | Chronological upcoming-match listing |
 | B-Tree      | `idx_reservations_user_status` | `reservations(user_id, status)` | Per-user reservation status lookups  |
@@ -449,6 +450,8 @@ docker compose up -d
 [5/5] queries.sql     – all 22 analytical + maintenance queries
 ```
 
+> ⚠️ **Still 5 steps as of Phase 4.** A new `advanced.sql` script (audit-log trigger + admin materialized view) was added in Phase 4 but was **not** added to this bootstrap sequence — see [Phase 4 → Known Implementation Notes](#phase-4).
+
 📄 Full architecture write-up: [`docs/Phase2/Phase2_Report.pdf`](docs/Phase2/Phase2_Report.pdf)
 
 ---
@@ -458,19 +461,23 @@ docker compose up -d
 ## 🏛️ Phase 3 — Backend Implementation (REST API, No ORM)
 
 > **Status: ✅ Complete** — A raw-SQL FastAPI backend covering auth, ticket search, reservations, payments, waitlisting, support reports, and an admin dashboard, backed by Redis (cache-aside search, OTPs, waitlist queues, payment idempotency) and Celery (durable reservation-lifecycle jobs), fully containerized alongside the Phase 1/2 database tier.
+>
+> ⚠️ **Read this alongside [Phase 4](#phase-4).** Several things documented below as delivered in Phase 3 — the Redis cache-aside search, the `pg_trgm` fuzzy fallback, the `Idempotency-Key` payment header, and the 4-service (including `celery_worker`) Docker Compose stack — were changed or removed in the Phase 4 codebase. This section is kept as an accurate record of what Phase 3 shipped; forward-pointers below mark what changed.
 
 **Goal:** Build the server side with direct SQL queries (**no ORM**) and Redis-backed caching, per the original Phase 3 spec — then go beyond it with rate limiting, idempotent payments, QR-code tickets, and a sold-out waitlist.
 
 ### ✅ Deliverables Checklist
 
 - [x] RESTful JSON API — no ORM; every query is raw SQL via a pooled `psycopg2` connection (`app/database.py`)
-- [x] Redis integration — OTP storage (TTL-based expiration), ticket-search cache-aside, sold-out waitlists, and payment idempotency
-- [x] Core endpoints: auth & signup, profile management, city/venue listings, ticket search & details, timed reservation locks, payment processing, cancellation, booking history, and issue reporting — **21 endpoints total**
+- [x] Redis integration — OTP storage (TTL-based expiration), ticket-search cache-aside*, sold-out waitlists, and payment idempotency*
+- [x] Core endpoints: auth & signup, profile management, city/venue listings, ticket search & details, timed reservation locks, payment processing, cancellation, booking history, and issue reporting — **21 endpoints total** (now 25 as of [Phase 4](#phase-4))
 - [x] API documentation — this section, plus the full endpoint-by-endpoint reference in [`docs/Phase3/Phase3_Backend_Implementation.md`](docs/Phase3/Phase3_Backend_Implementation.md)
-- [x] **Bonus:** advanced filtering (7 optional search filters) plus a `pg_trgm` fuzzy "did you mean" fallback
+- [x] **Bonus:** advanced filtering (7 optional search filters) plus a `pg_trgm` fuzzy "did you mean" fallback*
 - [x] **Bonus:** expiry reminder notifications as durable **Celery** tasks, not just a lazy check
-- [x] **Bonus:** containerizing the backend and Redis alongside the existing database container (`api`, `celery_worker` services in `docker-compose.yml`)
+- [x] **Bonus:** containerizing the backend and Redis alongside the existing database container (`api`, `celery_worker`* services in `docker-compose.yml`)
 - [ ] Real SMS/Email OTP delivery — a working SMTP sender exists (`app/utils/email_sender.py`) but isn't called from any route yet; OTPs are logged to the server console instead (see [Known Implementation Notes](#-known-implementation-notes--open-items))
+
+<sub>* Superseded or removed in Phase 4 — search moved to ElasticSearch, the `Idempotency-Key` header was dropped, and `celery_worker` is no longer in `docker-compose.yml`. See [Phase 4](#phase-4).</sub>
 
 ### 🧱 Tech Stack
 
@@ -491,21 +498,21 @@ docker compose up -d
 | Feature | Summary |
 |---|---|
 | **OTP auth** | 6-digit code, 120s TTL in Redis, rate-limited to 3/min/IP; used by signup, login, and password reset alike |
-| **Ticket search** | 7 optional filters, 60-second cache-aside, `pg_trgm` fuzzy fallback when an exact/`ILIKE` search returns 0 rows |
+| **Ticket search** | 7 optional filters, 60-second cache-aside, `pg_trgm` fuzzy fallback when an exact/`ILIKE` search returns 0 rows ⚠️ *replaced by ElasticSearch in Phase 4* |
 | **Surge pricing** | Display-only **+15%** when `0 < remaining_capacity < 1,000` (a hardcoded `total_capacity = 5,000` is used for every ticket) — never persisted to `tickets.price`, and **not** what `POST /api/payments/` actually charges |
 | **Timed reservations** | 15-minute hold under `SELECT ... FOR UPDATE`; checks both `users.is_active` and `tickets.is_active` before allowing a reservation |
 | **Sold-out waitlist** | A Redis list (`RPUSH`/`LPOP`), popped with a mock SMS log line when a paid reservation is cancelled or lazily expires during a payment attempt |
-| **Idempotent payments** | Requires an `Idempotency-Key` header; the response is cached per-user for 24h and includes a base64 QR-code PNG on success |
-| **Reservation lifecycle** | Two independent Celery tasks per reservation — a 13-minute payment reminder and a 15-minute auto-cancellation, each re-checking status under a row lock |
+| **Idempotent payments** | ⚠️ *Removed in Phase 4* — originally required an `Idempotency-Key` header, cached the response per-user for 24h; see [Phase 4](#phase-4) |
+| **Reservation lifecycle** | Two independent Celery tasks per reservation — a 13-minute payment reminder and a 15-minute auto-cancellation, each re-checking status under a row lock. ⚠️ *As of Phase 4, no `celery_worker` container consumes these by default* |
 | **Admin/Support dashboard** | Aggregated revenue/sales/cancellation/report stats, a full reservation list, and a generic status-update endpoint — gated by a `role` re-check against the database, not the JWT's `role` claim |
-| **Rate limiting** | `POST /api/auth/otp` (3/min) and `GET /api/tickets/search` (20/min), both per client IP, in-memory rather than Redis-backed |
+| **Rate limiting** | `POST /api/auth/otp` (3/min) and `GET /api/tickets/search` (20/min → 100/min as of Phase 4), both per client IP, in-memory rather than Redis-backed |
 
 ### 📡 API Reference (Summary)
 
-**Base URL:** `http://localhost:8000` · **Auth:** `Authorization: Bearer <JWT>` unless noted below. Full request/response schemas, validation rules, and worked `curl` examples for every endpoint are in **[`docs/Phase3/Phase3_Backend_Implementation.md` §3](docs/Phase3/Phase3_Backend_Implementation.md#3-complete-api-reference)**.
+**Base URL:** `http://localhost:8000` · **Auth:** `Authorization: Bearer <JWT>` unless noted below. Full request/response schemas, validation rules, and worked `curl` examples for every endpoint are in **[`docs/Phase3/Phase3_Backend_Implementation.md` §3](docs/Phase3/Phase3_Backend_Implementation.md#3-complete-api-reference)**. This table reflects the Phase 3 API as originally delivered — 4 more endpoints were added in Phase 4 (see [Phase 4](#phase-4)).
 
 <details>
-<summary><strong>Click to expand all 21 endpoints</strong></summary>
+<summary><strong>Click to expand all 21 Phase-3 endpoints</strong></summary>
 
 | Method & Path | Auth | Description |
 |---|:---:|---|
@@ -543,17 +550,17 @@ docker compose up -d
   | Key pattern | Purpose | TTL |
   |---|---|---|
   | `otp:{phone_number}` | Login / signup / reset-password OTP | 120s |
-  | `tickets:search:{...7 filter values...}` | Cache-aside for ticket search results | 60s |
+  | `tickets:search:{...7 filter values...}` | Cache-aside for ticket search results ⚠️ *dead as of Phase 4 — nothing writes this key anymore, though `clear_ticket_cache()` still scans for it, see [Phase 4](#phase-4)* | 60s |
   | `user:profile:{user_id}` | Profile-cache invalidation hook *(not currently written to)* | — |
   | `waitlist:{ticket_id}` | Sold-out-ticket waiting list (Redis list, **no DB backing** — lost if Redis is flushed) | none |
-  | `payment_idempotency:{user_id}:{idempotency_key}` | Cached payment response, per user & key | 24h |
+  | `payment_idempotency:{user_id}:{idempotency_key}` | Cached payment response, per user & key ⚠️ *removed entirely as of Phase 4* | 24h |
 
 - **JWT:** `HS256`, 120-minute access tokens by default (`ACCESS_TOKEN_EXPIRE_MINUTES`) — signed with `PyJWT` and verified with `python-jose`; both libraries are in play, which is functionally fine but worth knowing when debugging token issues.
 - The full environment-variable table, CORS origins, and the exact Celery worker command are in [`docs/Phase3/Phase3_Backend_Implementation.md` §2](docs/Phase3/Phase3_Backend_Implementation.md#2-database--redis-configuration).
 
 ### ⚙️ Cache Invalidation & Sync Strategy
 
-Cache-aside patterns, invalidation triggers, transaction-safety ordering (why a DB commit always happens *before* the corresponding cache entry is cleared), and Redis key lifecycles are documented separately in **[`docs/Phase3/Database_Sync_Cache_Invalidation_Strategy.md`](docs/Phase3/Database_Sync_Cache_Invalidation_Strategy.md)**.
+Cache-aside patterns, invalidation triggers, transaction-safety ordering (why a DB commit always happens *before* the corresponding cache entry is cleared), and Redis key lifecycles are documented separately in **[`docs/Phase3/Database_Sync_Cache_Invalidation_Strategy.md`](docs/Phase3/Database_Sync_Cache_Invalidation_Strategy.md)**. ⚠️ That document predates Phase 4's move to ElasticSearch for search — its ticket-detail-cache and reservation/payment-cache-invalidation content still applies, but its ticket-search cache-aside content describes a path that's no longer live.
 
 ### 🚀 Running the Backend
 
@@ -571,25 +578,27 @@ docker compose up --build -d
 curl http://localhost:8000/
 ```
 
+> ⚠️ **This was the Phase 3 compose topology.** As of Phase 4, `docker-compose.yml` defines 5 services (`postgres_db`, `redis`, `elasticsearch`, `api`, `frontend`) and no longer includes `celery_worker` — see [Phase 4 → Running Phase 4 Locally](#phase-4) for the current, accurate steps.
+
 Interactive docs are auto-generated by FastAPI: Swagger UI at `http://localhost:8000/docs`, ReDoc at `/redoc`. Without the `celery_worker` container/process running, reservations still succeed, but the 13-/15-minute reminder and auto-cancellation jobs never fire. The complete setup guide — including the local-venv alternative, every required `.env` variable, and how to confirm the Celery worker actually registered its tasks — is in [`docs/Phase3/Phase3_Backend_Implementation.md` §1](docs/Phase3/Phase3_Backend_Implementation.md#1-setup--running-the-server).
 
 ### 🧪 Testing
 
 - **Postman:** import `backend/postman/openapi.json` (an auto-generated OpenAPI spec) and `backend/postman/Local_Environment.json`. ⚠️ The checked-in `openapi.json` predates this revision's two newest endpoints — `POST /api/reservations/waitlist` and `POST /api/auth/reset-password` aren't in it yet, so test those two via `curl` or a manually added request until the spec is regenerated.
 - **curl:** a full end-to-end user-journey script — signup → search → reserve → pay with idempotency → cancel → waitlist → password reset — is in [`docs/Phase3/Phase3_Backend_Implementation.md` §4.2](docs/Phase3/Phase3_Backend_Implementation.md#42-testing-with-curl--full-user-journey).
-- **pytest:** `backend/tests/` currently covers two cases — an unauthenticated reservation attempt (expects `401`) and ticket search, unfiltered and filtered (expects `200`). None of this phase's newer behavior (idempotency, waitlist, surge pricing, rate limiting, the `is_active` checks) has test coverage yet.
+- **pytest:** `backend/tests/` currently covers two cases — an unauthenticated reservation attempt (expects `401`) and ticket search, unfiltered and filtered (expects `200`). None of this phase's newer behavior (idempotency, waitlist, surge pricing, rate limiting, the `is_active` checks) has test coverage yet. ⚠️ **As of Phase 4, the search test was updated but now disagrees with the route it tests** — see [Phase 4 → Testing](#phase-4).
   ```bash
   pytest -v --tb=short                                # locally
   docker exec sports_ticket_api python -m pytest -v   # inside the running container
   ```
-- **CI:** every push/PR now builds the *entire* stack (Postgres, Redis, API, Celery worker) via Docker Compose and runs the `pytest` suite inside the `api` container — see [CI/CD Pipeline](#-cicd-pipeline) below.
+- **CI:** every push/PR now builds the *entire* stack (Postgres, Redis, API, Celery worker) via Docker Compose and runs the `pytest` suite inside the `api` container — see [CI/CD Pipeline](#-cicd-pipeline) below. ⚠️ **This pipeline was replaced in Phase 4** — the current `ci.yml` no longer does this; see [CI/CD Pipeline](#-cicd-pipeline).
 
 ### 📝 Known Implementation Notes & Open Items
 
 Caught by reading the source directly rather than relying on prior notes. The full, numbered, revision-tracked changelog lives in [`docs/Phase3/Phase3_Backend_Implementation.md` §6](docs/Phase3/Phase3_Backend_Implementation.md#6-implementation-notes-worth-knowing) — highlights:
 
-- **Surge pricing is display-only.** The `+15%` price shown by ticket search/detail is computed fresh in Python and never written to `tickets.price` — `POST /api/payments/` always charges the raw base price, so what a customer sees while browsing and what they're actually charged at checkout can genuinely differ.
-- **Confirmed gap:** the Celery-driven 15-minute auto-cancellation (`cancel_expired_reservation_task`) restores `remaining_capacity` but does **not** pop the ticket's waitlist — only the two payments-side paths (`POST /api/payments/`'s lazy-expiry check and `POST /api/payments/cancel`) do. A seat freed by a silent auto-expiry currently notifies no one on the waitlist.
+- **Surge pricing is display-only.** The `+15%` price shown by ticket search/detail is computed fresh in Python and never written to `tickets.price` — `POST /api/payments/` always charges the raw base price, so what a customer sees while browsing and what they're actually charged at checkout can genuinely differ. (Still true as of Phase 4.)
+- **Confirmed gap:** the Celery-driven 15-minute auto-cancellation (`cancel_expired_reservation_task`) restores `remaining_capacity` but does **not** pop the ticket's waitlist — only the two payments-side paths (`POST /api/payments/`'s lazy-expiry check and `POST /api/payments/cancel`) do. A seat freed by a silent auto-expiry currently notifies no one on the waitlist. (Still true in Phase 4, which additionally doesn't sync this path to ElasticSearch — see [Phase 4](#phase-4).)
 - **`reservations.cancelled_by_support_id`** is defined in the schema but never set by any reviewed cancellation path.
 - **No API endpoint exists to deactivate or reactivate a user account** — `users.is_active` is enforced almost everywhere it matters (login, reservations, payments, cancellations) but can currently only be toggled with a direct `UPDATE` statement.
 - **`app/utils/email_sender.py`** is a complete, real SMTP-based OTP sender that isn't called from any route — this is a deliberate placeholder for real delivery (credentials shouldn't be hardcoded into the repo), not an oversight; OTPs are logged to the server console instead.
@@ -602,120 +611,139 @@ Caught by reading the source directly rather than relying on prior notes. The fu
 
 <a id="phase-4"></a>
 
-## 🏛️ Phase 4 — Client Application & ElasticSearch Search Engine
+## 🏛️ Phase 4 — Client Application & ElasticSearch Integration
 
-> **Status: 🔶 In Progress** — The client application is delivered: a React + Vite single-page app covering login/signup/password-reset, ticket search & filtering, ticket details & reservation, a payment gateway, a user panel (booking history, account settings, support tickets), and an admin/support console. The ElasticSearch indexing/sync layer on the backend side of this phase was **not** part of the files reviewed for this section — everything below reflects only what could be verified by reading the client's own source.
+> **Status: ✅ Complete** — A React 19 + Vite SPA covering the full user journey (auth, ElasticSearch-backed search, reservation, payment, profile, support) and a 4-tab admin console, backed by a new ElasticSearch layer for ticket search, plus an audit-logging trigger and a materialized view for admin analytics. Everything in this section was verified by reading the actual `phase4-client-elasticsearch` branch source (backend **and** frontend), not inferred from naming or from the Phase 3 docs.
 
-**Goal:** Ship a client UI and migrate ticket search from SQL to **ElasticSearch** for improved performance.
+**Goal:** Ship a client UI and migrate ticket search from SQL to **ElasticSearch** for improved performance, per the original Phase 4 spec.
 
 ### ✅ Deliverables Checklist
 
-- [x] Core client screens: login, ticket search & filtering, ticket details, reservation & payment flow, and a user panel (booking history + report submission) — all implemented and verified directly from source
-- [x] Extra beyond the original spec: a full admin/support console (dashboard stats, ticket & user tables, ticket-reply workflow)
-- [x] Standalone containerization for the client — multi-stage `Dockerfile` (Node build → Nginx serve, with SPA fallback routing)
-- [x] Documentation of the UI–API interaction — this section, plus the full endpoint-by-endpoint contract in [`docs/Phase4/Phase4_Frontend_Client_Implementation.md`](docs/Phase4/Phase4_Frontend_Client_Implementation.md)
-- [ ] ElasticSearch indexing for tickets, with two-way sync between the SQL database and ElasticSearch on ticket create/update/delete — **not verified**; no backend source for this phase was reviewed
-- [ ] Confirmation that ticket-search traffic is actually routed to ElasticSearch rather than the primary database — the client calls a generic `GET /tickets/search`, agnostic of what backs it server-side; UI copy and code comments reference "ElasticSearch," but this hasn't been cross-checked against backend source
-- [ ] 🌟 Bonus: ElasticSearch autocomplete/smart filtering — not present in the reviewed client (search is a plain debounced query, no autocomplete suggestions)
-- [ ] 🌟 Bonus: native mobile client — not delivered; this is a responsive web SPA
+- [x] Client-side source code — React 19 + Vite SPA, 8 pages, Persian/RTL UI (`frontend/`)
+- [x] ElasticSearch indexing for tickets, with a one-off bulk sync script (`backend/app/sync_es.py`) and per-mutation capacity sync wired into the reserve/pay/cancel routes
+- [x] `GET /api/tickets/search` fully rerouted to query ElasticSearch (fuzzy `multi_match`, edge-ngram autocomplete mapping, sport/venue/price filters)
+- [x] Documentation of the UI–API interaction — see [`docs/Phase4/Phase4_frontend_client_implementation.md`](docs/Phase4/Phase4_frontend_client_implementation.md) for the frontend deep-dive; the backend/ElasticSearch specifics are new to this update and covered below
+- [x] **Bonus:** audit-logging trigger (`reservation_audit_logs`) + a materialized view (`admin_dashboard_mview`, refreshed via `refresh_admin_dashboard_mview()`) for near-O(1) admin dashboard reads
+- [x] **Bonus:** the QR-code + bank tracking-code ticket, generated server-side since Phase 3, is now actually rendered in the client (`Profile.jsx`) instead of going unused
+- [ ] **Not fully delivered:** true two-way SQL ↔ ElasticSearch sync — `index_ticket_in_es()` and `delete_ticket_in_es()` exist but are never called; only capacity updates are wired into live routes
+- [ ] **Not fully delivered:** the optional autocomplete/smart-filtering bonus — the ES mapping supports it (`edge_ngram`, 2–20 grams) but the frontend search bar only ever sends `q` and `sport_type`, leaving `venue`/`min_price`/`max_price` and true autocomplete unused from the UI
 
-### 🧱 Tech Stack
+### 🧱 Tech Stack Additions
 
 | Layer | Choice |
 |---|---|
-| **Framework** | React `19.2.8` |
-| **Build tool** | Vite `8.2.0` (`@vitejs/plugin-react`) |
-| **Routing** | `react-router-dom 7.18.2` |
-| **HTTP client** | `axios 1.19.0` — one shared instance with a bearer-token request interceptor |
-| **Styling** | Tailwind CSS `3.4.19` + PostCSS/Autoprefixer |
-| **Notifications** | `react-hot-toast` |
-| **Icons** | `lucide-react` |
-| **Linting** | ESLint (flat config) + `eslint-plugin-react-hooks`/`react-refresh` |
-| **State management** | None — local `useState`/`useEffect` per page, no shared cache |
+| **Frontend framework** | React `19.2.8` + Vite `8.2.0`, `react-router-dom 7.18.2` |
+| **HTTP client** | axios `1.19.0` — single instance, hardcoded `baseURL`, bearer-token request interceptor, no response interceptor |
+| **Styling** | Tailwind CSS `3.4.19` |
+| **UI extras** | `react-hot-toast`, `lucide-react` |
+| **Search engine** | ElasticSearch `8.11.3` (Docker image `docker.elastic.co/elasticsearch/elasticsearch:8.11.3`, single-node, `xpack.security.enabled=false`) via the `elasticsearch` Python client `8.11.1` |
+| **Frontend serving** | Multi-stage Docker build — `node:20-alpine` builds, `nginx:alpine` serves with SPA `try_files` fallback |
 
-### 🖼️ Client Screens & Their API Calls
+### 🔎 ElasticSearch Architecture
 
-| Page | Route | Purpose | Key endpoint(s) |
-|---|---|---|---|
-| `Login.jsx` | `/` | Login, OTP-based signup, OTP-based password reset (one component, 3 modes) | `POST /auth/login`, `/auth/otp`, `/auth/signup`, `/auth/reset-password` |
-| `Dashboard.jsx` | `/dashboard` | Debounced (600ms) ticket search with sport/venue filters | `GET /tickets/search` |
-| `TicketDetail.jsx` | `/tickets/:id` | Ticket detail + create a 1-ticket reservation | `GET /tickets/:id`, `POST /reservations/` |
-| `PaymentGateway.jsx` | `/payment/:reservationId` | 15-minute countdown checkout | `POST /payments/` |
-| `Profile.jsx` | `/profile` | Booking history (with per-item enrichment), cancellations, account settings | `GET/PUT /user/profile`, `GET /user/bookings`, `POST /payments/cancel` |
-| `Support.jsx` | `/support` | Submit & review the user's own support tickets | `GET/POST /reports/` |
-| `AdminDashboard.jsx` | `/admin` | 4-tab console: overview stats, tickets (read-only), users (read-only), report replies | `GET /admin/dashboard-stats`, `/admin/reports`, `/admin/users`, `/admin/tickets`, `PUT /admin/reports/:id/reply` |
+- **Index:** `tickets`, created by `init_elasticsearch()` in `backend/app/es_client.py` — a custom `autocomplete_analyzer` (`edge_ngram` tokenizer, 2–20 grams, lowercase filter) is applied to `home_team`, `away_team`, `title`, and `venue_name`; `sport_type` is mapped as a `keyword`, `match_date` as a `date`.
+- **Bulk sync:** `python -m app.sync_es` reads every row directly from the `tickets` table and indexes it, computing a `title` field (`"{home_team} vs {away_team}"`) on the fly. This script must be **run manually** — it is not part of container startup and not wired into `docker-compose.yml`.
+- **Search:** `GET /api/tickets/search` now builds an ES `bool`/`must` query — a fuzzy (`fuzziness: AUTO`) `multi_match` across `home_team^3`/`away_team^3`/`title^2`/`venue_name` for the free-text `q` filter, a `term` filter on `sport_type`, a fuzzy `match` on `venue`, and a `range` filter on `price` — sorted by `match_date desc`, capped at 50 hits. This **fully replaces** Phase 3's raw-SQL + 60-second Redis cache-aside + `pg_trgm` "did you mean" fallback for this endpoint; that older code path is now dead (though `clear_ticket_cache()` is still called after reservations and payments — harmlessly, since it now finds nothing to delete).
+- **Live capacity sync:** `update_ticket_capacity_in_es()` is called immediately after the SQL `UPDATE` in three places — new reservation, successful payment, and payment cancellation — keeping ElasticSearch's `remaining_capacity` (and therefore search-time surge pricing) close to the database. The Celery auto-cancellation path does **not** call it (see Known Implementation Notes).
+- **Surge pricing** (`+15%` when `0 < remaining_capacity < 1,000`) is computed **twice, independently**: once in Python over the ElasticSearch document during search, and once over a fresh SQL row during `GET /api/tickets/{ticket_id}` — same business rule, two separate implementations to keep in sync if it ever changes.
+- **Index create/update/delete helpers** (`index_ticket_in_es`, `update_ticket_capacity_in_es`, `delete_ticket_in_es`) all live in `es_client.py`, but only the capacity-update helper is actually called from a route.
 
-Routing is guarded by two wrappers in `App.jsx`: **`PrivateRoute`** (requires a token in `localStorage`) and **`AdminRoute`** (additionally decodes the JWT payload client-side — no signature check — to gate `admin`/`support` roles). This is a UI convenience only; real authorization enforcement lives server-side, per the Phase 3 backend's own role re-check against the database.
+### 📡 New & Changed Endpoints
 
-<details>
-<summary><strong>Click to expand the full client → API contract (18 calls)</strong></summary>
+The API grew from **21 to 25 endpoints**. Four are new, all supporting the frontend added this phase:
 
-| Method & Path | Called from | Request body / params |
-|---|---|---|
-| `POST /auth/login` | Login.jsx | form-urlencoded `username`, `password` |
-| `POST /auth/otp` | Login.jsx (signup + forgot) | `{ phone_number }` |
-| `POST /auth/signup` | Login.jsx | `{ phone_number, otp_code, first_name, last_name, email, city, password }` |
-| `POST /auth/reset-password` | Login.jsx | `{ phone_number, otp_code, new_password }` |
-| `GET /tickets/search` | Dashboard.jsx | query: `q?`, `sport_type?`, `venue?` |
-| `GET /tickets/:id` | TicketDetail.jsx, Profile.jsx | — |
-| `POST /reservations/` | TicketDetail.jsx | `{ ticket_id, quantity: 1 }` |
-| `POST /payments/` | PaymentGateway.jsx | `{ reservation_id, payment_method: 'online_gateway' }` |
-| `POST /payments/cancel` | Profile.jsx | `{ reservation_id }` |
-| `GET /user/profile` | Profile.jsx | — |
-| `PUT /user/profile` | Profile.jsx | `{ first_name, last_name, email, city }` |
-| `GET /user/bookings` | Profile.jsx | — |
-| `GET /reports/` | Support.jsx | — |
-| `POST /reports/` | Support.jsx | `{ category, report_text, reservation_id: null }` |
-| `GET /admin/dashboard-stats` | AdminDashboard.jsx | — |
-| `GET /admin/reports` | AdminDashboard.jsx | — |
-| `PUT /admin/reports/:id/reply` | AdminDashboard.jsx | `{ admin_response, status: 'resolved' }` |
-| `GET /admin/users`, `GET /admin/tickets` | AdminDashboard.jsx | — |
+| Method & Path | Purpose |
+|---|---|
+| `GET /api/user/profile` | Fetch the current user's own profile (previously only `PUT` existed) |
+| `GET /api/admin/reports` | List all reports for the admin console's Reports tab |
+| `PUT /api/admin/reports/{report_id}/reply` | Reply to a report — always sets `status: resolved`; there's no UI or API path to an intermediate `in_progress` status |
+| `GET /api/admin/users` | Read-only user list (role, active status, join date) for the admin Users tab |
 
-Full request/response shapes, per-field notes, and the reasoning behind every entry above are in [`docs/Phase4/Phase4_Frontend_Client_Implementation.md` §7](docs/Phase4/Phase4_Frontend_Client_Implementation.md#7-complete-client--api-contract).
+Two existing endpoints changed behavior significantly:
 
-</details>
+- **`GET /api/tickets/search`** — rate limit raised from 20/min to **100/min**; filter set changed from Phase 3's 7 SQL filters to 5 ES-query filters (`q`, `sport_type`, `venue`, `min_price`, `max_price`); no longer touches Redis at all.
+- **`POST /api/payments/`** — the `Idempotency-Key` requirement documented in Phase 3 is gone; the route and its `PaymentRequest` schema have no header or idempotency-cache logic left. `GET /api/user/bookings` also now regenerates a QR code + tracking code **on the fly, per request**, for every paid booking (not just at the moment of payment).
 
-### 🐳 Containerization
+### 🎨 Frontend Client (`frontend/`)
 
-The client ships its own multi-stage `Dockerfile` — a `node:20-alpine` build stage running `npm run build`, copied into an `nginx:alpine` stage with an inline SPA-fallback config (`try_files $uri $uri/ /index.html;`) on port 80. It is **not yet wired into the root `docker-compose.yml`**, so it currently has to be built and run as a standalone image — see [Running the Phase 4 Client](#-getting-started) below.
+A single-page Persian/RTL React app. The full component-by-component breakdown, the complete client→API contract, and a numbered list of 13 frontend-only gaps live in **[`docs/Phase4/Phase4_frontend_client_implementation.md`](docs/Phase4/Phase4_frontend_client_implementation.md)**. In brief:
+
+- **8 pages:** `Login` (login/signup/OTP-reset, 3-in-1), `Dashboard` (ES-backed search), `TicketDetail`, `PaymentGateway` (routed) + `Payment` (legacy, unrouted dead code), `Profile` (bookings + settings), `Support`, `AdminDashboard` (4 tabs).
+- No shared state management — every page manages its own `useState`/`useEffect` and re-fetches on mount; there is no response interceptor, so an expired token surfaces as a per-page toast rather than an automatic redirect to login.
+- `Profile.jsx` now renders the QR code and bank tracking code returned by `GET /api/user/bookings` for each paid booking (`booking.qr_code`, `booking.tracking_code`) — this closes a gap flagged when the frontend was first reviewed in isolation, before backend source was available.
+- The Dashboard search bar only ever sends `q` and `sport_type` to `/api/tickets/search` — despite the backend supporting `venue`, `min_price`, `max_price`, and ES-level fuzzy autocomplete, none of that has a corresponding filter control in the UI yet.
+- There is still **no frontend integration with the sold-out waitlist** (`POST /api/reservations/waitlist`) — a sold-out ticket's Reserve button is simply disabled, with no "notify me" affordance.
+
+### 🚀 Running Phase 4 Locally
+
+```bash
+# 1. Bring up the full stack — 5 services: postgres_db, redis,
+#    elasticsearch, api, frontend. (celery_worker is NOT one of them
+#    in this compose file — see Known Implementation Notes below.)
+docker compose up --build -d
+
+# 2. REQUIRED first-run step — ElasticSearch starts with an empty index.
+#    Bulk-index existing tickets from Postgres into the "tickets" index:
+docker compose exec api python -m app.sync_es
+
+# 3. Open the client
+#    Frontend:  http://localhost:5173
+#    API docs:  http://localhost:8000/docs
+#    ES node:   http://localhost:9200
+```
+
+> ⚠️ Skipping step 2 doesn't raise an error anywhere visible — `GET /api/tickets/search` silently returns `{"tickets": []}` for every query, because the route wraps its ES call in a bare `except Exception` that swallows ES's "index not found" error the same way it would swallow any other failure.
+
+### 🧪 Testing
+
+- `backend/tests/test_tickets.py` was updated for this phase but its two assertions **no longer match the current route**: both tests assert the search response includes `count` and `source` keys (`assert "count" in data`, `assert "source" in data`) in addition to `tickets`, but `search_tickets()` in `routes/tickets.py` only ever returns `{"tickets": results}`. Run as written, these assertions fail against the current implementation.
+- No test coverage was added for ElasticSearch connectivity/indexing, the capacity-sync helpers, any of the 4 new admin/profile endpoints, or the new trigger/materialized view.
+- As covered in [CI/CD Pipeline](#-cicd-pipeline) below, none of the existing `pytest` suite is actually executed in CI as of this phase.
 
 ### 📝 Known Implementation Notes & Open Items
 
-Caught by reading the client source directly. The full write-up, including request/response field-by-field notes, is in [`docs/Phase4/Phase4_Frontend_Client_Implementation.md` §8](docs/Phase4/Phase4_Frontend_Client_Implementation.md#8-known-gaps--discrepancies-frontend-side) — highlights:
+Verified directly from the `phase4-client-elasticsearch` branch source, continuing the spirit of Phase 3's changelog:
 
-- **No `Idempotency-Key` header is sent on `POST /payments/`**, despite the Phase 3 backend documenting that endpoint as idempotency-key-gated. Not confirmed whether the backend for this phase still enforces it — needs a cross-check once its source is available.
-- **No QR-code / digital ticket is rendered anywhere in the client**, even though the payment endpoint is documented (Phase 3) to return one on success.
-- **Zero client integration with the sold-out waitlist endpoint** (`POST /api/reservations/waitlist`) — the Reserve button is simply disabled when capacity is 0, with no "join waitlist" alternative offered.
-- **`reports.reservation_id` is always sent as `null`** from the Support form, even though `AdminDashboard.jsx` is written to display it when present — the field exists in the contract but the client never populates it.
-- **A legacy `Payment.jsx` component still exists but is unrouted dead code**, superseded by `PaymentGateway.jsx` (different timer length, different request payload).
-- **The API base URL is hardcoded** in `src/api.js` (`http://localhost:8000/api`), not environment-driven — retargeting the client requires a source edit and rebuild, not just an env var.
-- **Whether `GET /tickets/search` is actually ElasticSearch-backed is unverified.** The client's UI copy and code comments reference "ElasticSearch," but nothing in the client itself proves what's on the other side of that endpoint — this is the single biggest open item for calling this phase complete.
+- **`celery_worker` was dropped from `docker-compose.yml`.** The compose file now defines only `postgres_db`, `redis`, `elasticsearch`, `api`, and `frontend`. The backend still schedules the 13-minute payment reminder and 15-minute auto-cancellation via `apply_async`, but with no worker process consuming the Redis-backed Celery queue by default, pending reservations no longer auto-expire and no reminders fire unless someone runs a worker manually outside Compose.
+- **`database/init.sh` was not updated to run the new `advanced.sql`.** On a fresh volume, `reservation_audit_logs`, its trigger, and `admin_dashboard_mview` (plus `refresh_admin_dashboard_mview()`) are never created — so `GET /api/admin/dashboard-stats` will fail with an undefined-function/relation error until someone runs `psql -f database/scripts/advanced.sql` by hand inside the Postgres container.
+- **The `Idempotency-Key` payment protection documented in Phase 3 has been removed entirely.** `POST /api/payments/` no longer requires or reads any idempotency header, and there is no remaining Redis idempotency cache or schema field for it — double-submitted payments are no longer guarded against at the API layer.
+- **The CI pipeline (`.github/workflows/ci.yml`) was replaced with a simpler, weaker one.** It no longer brings up the real `docker-compose.yml` stack and no longer runs `pytest` at all. It now only: (1) runs `schema.sql` → `seed.sql` → `procedures.sql` → `queries.sql` against a bare `postgres:16` GitHub Actions service — skipping both `indexes.sql` and `advanced.sql` — and (2) `docker build`s the backend and frontend images in isolation, with no Redis, ElasticSearch, or Celery involved and no test execution. See [CI/CD Pipeline](#-cicd-pipeline) for the full before/after.
+- **`init_elasticsearch()` is never called at API startup** — `main.py`'s health check only wires up Postgres and Redis. The ES index is created purely as a side effect of running `sync_es.py` manually.
+- **Health check (`GET /`) doesn't report ElasticSearch status** at all — only `database_connected` and `redis_connected` — despite ES now being a hard dependency for ticket search.
+- **`ELASTICSEARCH_URL` isn't part of `app/config.py`'s typed `Settings`**, nor is it listed in `backend/.env.example`. `es_client.py` reads it directly via `os.getenv("ELASTICSEARCH_URL", "http://elasticsearch:9200")`, bypassing the project's otherwise-consistent settings pattern (the fallback happens to match the Compose service name, so it works by accident in Docker, silently).
+- **`cancel_expired_reservation_task` still doesn't sync capacity to ElasticSearch** — it only updates Postgres. On top of the pre-existing Phase 3 gap that it doesn't pop the waitlist either, a silently auto-expired reservation now also leaves ElasticSearch's `remaining_capacity` (and therefore search-time surge pricing) stale for that ticket until something else touches it.
+- **`delete_ticket_in_es()` and `index_ticket_in_es()` are defined but never called** from any route — there is still no ticket create/update/delete admin endpoint, so full-document ES sync only ever happens via the manual bulk script, never incrementally.
+- **`reservation_audit_logs` is write-only.** The new trigger populates it on every reservation status change, but no endpoint currently reads or exposes that history.
+- **The "active viewers" field** returned by `GET /api/tickets/{ticket_id}` is a simulated FOMO counter — a Redis view-counter multiplied by a random factor, not real concurrent-viewer data — and it isn't rendered anywhere in the frontend regardless.
+- **CORS in `main.py` lists explicit origins alongside a wildcard `"*"`** while also setting `allow_credentials=True` — browsers generally ignore `"*"` as an origin once credentials are enabled, so the explicit origins are likely doing the real work; worth a cleanup pass, not a functional blocker today.
+- **`backend/tests/test_tickets.py` is out of sync with the route it tests** — see Testing above.
 
-📄 **Full technical write-up** (routing, auth handling, every page's data flow, the complete client↔API contract, and all discrepancies): [`docs/Phase4/Phase4_Frontend_Client_Implementation.md`](docs/Phase4/Phase4_Frontend_Client_Implementation.md)
+📄 **Frontend deep-dive:** [`docs/Phase4/Phase4_frontend_client_implementation.md`](docs/Phase4/Phase4_frontend_client_implementation.md) (component-by-component walkthrough, complete client→API contract, 13 frontend-specific gaps)
 
 ---
 
 ## 🔁 CI/CD Pipeline
 
-Every push to `main` or `phase3-backend-implementation`, and every pull request into `main`, triggers the workflow defined in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — now named **"Phase 3 CI – Full Stack Verification"** and rebuilt to exercise the whole application, not just the database tier:
+> ⚠️ **This pipeline changed in Phase 4.** The description below reflects the *current* [`.github/workflows/ci.yml`](.github/workflows/ci.yml) on the `phase4-client-elasticsearch` branch, which is simpler than — and does less than — the Phase 3 pipeline it replaced.
+
+The workflow, now named **"Continuous Integration (CI) Pipeline,"** runs on push to `main`/`phase*` branches and on pull requests into `main`, and is split into two sequential jobs:
 
 <div align="center">
 
-| Step | Action                                                                                      |
-| :--: | ---------------------------------------------------------------------------------------------- |
-|  1️⃣  | Checkout repository code                                                                    |
-|  2️⃣  | Write a CI-only `.env` file (test JWT secret, Compose-network hostnames)                    |
-|  3️⃣  | `chmod +x database/init.sh`                                                                 |
-|  4️⃣  | Log in to Docker Hub (via repository secrets) to avoid image-pull rate limits               |
-|  5️⃣  | `docker compose --env-file .env up -d --build` — builds and starts **all four services**    |
-|  6️⃣  | Poll `sports_ticket_api`'s logs for "Application startup complete"; fail fast (with logs) if the container isn't running |
-|  7️⃣  | Print `postgres_db`, `api`, and `celery_worker` container logs                              |
-|  8️⃣  | Verify database integrity — `\dt`, plus row counts on `users` and `tickets`                 |
-|  9️⃣  | Run the `pytest` suite **inside the running `api` container**                               |
+| Job | Steps |
+| :--: | ------------------------------------------------------------------------------------------- |
+| **1️⃣ `database-tests`** | Starts a bare `postgres:16` GitHub Actions service (not the project's own Compose file) and runs, via `psql`: `schema.sql` → `seed.sql` → `procedures.sql` → `queries.sql`, in that order. |
+| **2️⃣ `docker-build-tests`** | Runs `docker build` on `./backend` and `./frontend` independently, with no `docker-compose`, no Redis, no ElasticSearch, and no container ever started or exercised. |
 
 </div>
 
-> ✅ This confirms the schema, seed data, and now the full **FastAPI + Redis + Celery** stack all build, start, and pass their tests together in a clean environment on every push — not just on a developer's machine. Note: unlike the Phase 1/2 pipeline, this workflow doesn't run an explicit `docker compose down` teardown step at the end; GitHub Actions' ephemeral runners discard the containers regardless, but it means there's no final teardown/health-check step after the `pytest` run.
+> ⚠️ **Regressions from the Phase 3 pipeline, confirmed by reading `ci.yml` directly:**
+> - `indexes.sql` and the new `advanced.sql` are **not** run in Job 1 — only schema, seed, procedures, and queries are validated.
+> - The real `docker-compose.yml` stack (Postgres + Redis + ElasticSearch + API + Frontend) is **never brought up** in CI — Job 2 only confirms that the two Docker images *build*, not that they run correctly together.
+> - **`pytest` is not executed anywhere in CI.** The Phase 3 pipeline ran the suite inside the live `api` container; this pipeline has no equivalent step at all.
+> - There is no automated verification of ElasticSearch connectivity, index creation, or search behavior.
+>
+> In short: CI now proves the SQL scripts apply cleanly and that both Docker images build — it does **not** prove the application runs, that Redis/ElasticSearch/Celery integrate correctly, or that any test passes.
 
 ---
 
@@ -725,26 +753,35 @@ Every push to `main` or `phase3-backend-implementation`, and every pull request 
 
 ### 🐳 Option 1 — Docker (Recommended)
 
-One command builds every container and leaves you with a fully-seeded, indexed, query-ready database — and, **as of Phase 3**, a running REST API and Celery worker too:
+One command builds every container — database, Redis, ElasticSearch, the FastAPI backend, and the React frontend:
 
 ```bash
 # 1. Clone the repository
 git clone https://github.com/MohammafAfra83/SportsTicketPlatform.git
 cd SportsTicketPlatform
 
-# 2. Create a .env file in the repo root (required by the api/celery_worker
-#    services — see backend/.env.example, or Phase 3 → Running the Backend
-#    above, for the full variable list)
+# 2. Create a .env file in the repo root (required by the api service —
+#    see backend/.env.example for the variable list; note ELASTICSEARCH_URL
+#    isn't in that file but defaults to http://elasticsearch:9200, which
+#    matches the Compose service name)
 
-# 3. Build and start all four services: postgres_db, redis, api, celery_worker
+# 3. Build and start all 5 services: postgres_db, redis, elasticsearch, api, frontend
 docker compose up --build -d
 
-# 4. (Optional) Connect and explore the database directly
+# 4. REQUIRED first run only — ElasticSearch starts empty; bulk-index
+#    existing tickets from Postgres into it:
+docker compose exec api python -m app.sync_es
+
+# 5. (Optional) Connect and explore the database directly
 docker exec -it sports_ticket_postgres psql -U postgres -d sports_ticket_db
 
-# 5. Or hit the API
-curl http://localhost:8000/
+# 6. Open the app
+#    Frontend (React):        http://localhost:5173
+#    API (Swagger UI):        http://localhost:8000/docs
+#    ElasticSearch node:      http://localhost:9200
 ```
+
+> ⚠️ **No `celery_worker` service exists in this Compose file.** The 13-/15-minute reservation reminder and auto-cancellation background jobs are still scheduled by the API, but nothing consumes them unless you run a Celery worker process separately (e.g. `celery -A app.core.celery_app worker` from inside a container with the backend code and the same Redis connection). Without it, pending reservations will not auto-expire on their own.
 
 > ℹ️ If you only want the **database tier** (e.g. for grading Phases 1–2 in isolation, no `.env` file needed), start just those two services: `docker compose up -d postgres_db redis`.
 
@@ -766,9 +803,13 @@ psql -d sports_ticket_db -f database/scripts/seed.sql
 psql -d sports_ticket_db -f database/scripts/indexes.sql
 psql -d sports_ticket_db -f database/scripts/procedures.sql
 psql -d sports_ticket_db -f database/scripts/queries.sql
+
+# 4. (Optional) Bonus features added in Phase 4 — audit-log trigger +
+#    admin materialized view — must currently be applied manually:
+psql -d sports_ticket_db -f database/scripts/advanced.sql
 ```
 
-> ℹ️ The `pg_trgm` extension is enabled automatically by `indexes.sql` to support fast fuzzy text search on `tickets.venue_name`, `tickets.home_team`, `tickets.away_team`, `users.first_name`/`last_name` — and, as of Phase 3, the ticket-search "did you mean" fallback in the API (see [Phase 3](#phase-3)).
+> ℹ️ The `pg_trgm` extension is enabled automatically by `indexes.sql` to support fast fuzzy text search on `tickets.venue_name`, `tickets.home_team`, `tickets.away_team`, `users.first_name`/`last_name`. As of Phase 4, the live ticket-search API endpoint uses ElasticSearch instead of these indexes, but `pg_trgm` and the trigram indexes remain in the schema and are still used by the `search_tickets_by_keyword` stored function from Phase 2.
 
 ### 🖥️ Running the Phase 4 Client
 
@@ -790,26 +831,14 @@ docker run -p 8080:80 sports-ticket-frontend   # → http://localhost:8080
 
 ---
 
-## 🗺 Project Roadmap — Upcoming Phases
+## 🐳 Cross-Phase Bonus — Dockerization
 
-_This section now tracks only what's still outstanding for Phase 4 — the client application itself is complete and documented above in the full [Phase 4](#phase-4) section. (Phase 3 was previewed here too, until it was completed — the same pattern applies to Phase 4's remaining items below.)_
+_Not one of the 4 core phases —_ as an additional, project-wide extra-credit feature, the stack is **containerized with Docker / Docker Compose** for one-command local setup. As of **Phase 4**, `docker-compose.yml` defines **5 services** — `postgres_db`, `redis`, `elasticsearch`, `api`, and `frontend` — all built and started with a single `docker compose up --build -d`.
 
-### 🏅 Phase 4 — Remaining Work: ElasticSearch Migration
-
-**Status:** ⏳ Planned / Unverified — client ✅, search backend ⏳
-
-**Goal:** Migrate ticket search from SQL to **ElasticSearch** for improved performance, with the already-delivered client as the consumer of that search endpoint.
-
-- Set up ElasticSearch indexing for tickets, with two-way sync between the SQL database and ElasticSearch on ticket create/update/delete.
-- Confirm `GET /tickets/search` is actually routed to ElasticSearch rather than the primary database (or Phase 3's `pg_trgm` fallback) — the client itself is agnostic to what backs this endpoint, so this can only be verified from backend source.
-- **Deliverable:** ElasticSearch connection/indexing scripts, and confirmation of the search migration in `docs/Phase4/Phase4_Frontend_Client_Implementation.md`.
-- 🌟 **Bonus (still open):** Autocomplete/smart filtering in ElasticSearch, or a native mobile client.
-
-### 🐳 Cross-Phase Bonus — Full-Stack Dockerization
-
-**Status:** ✅ Fully Implemented for the backend — **database tier (Phase 2)** and **backend API + Redis + Celery worker (Phase 3)** are all containerized via `docker-compose.yml`. The **Phase 4 client** has its own standalone multi-stage `Dockerfile` (Node build → Nginx) but has not yet been merged into that same Compose file.
-
-_Not one of the 4 core phases —_ as an additional, project-wide extra-credit feature, the full stack is **containerized with Docker / Docker Compose** for one-command local setup and reproducible deployment. As of Phase 3, all four backend services — `postgres_db`, `redis`, `api`, and `celery_worker` — build and start with a single `docker compose up --build -d`, and the CI pipeline verifies that stack (not just the database) on every push. The Phase 4 client currently has to be built/run separately (see [Running the Phase 4 Client](#-getting-started)); only the ElasticSearch layer for this phase remains completely undocumented in this repository.
+**What changed getting here:**
+- **Phase 2:** database tier only (`postgres_db`).
+- **Phase 3:** added `redis`, `api`, and `celery_worker` — 4 services total, all verified end-to-end by CI on every push.
+- **Phase 4:** added `elasticsearch` and `frontend`; **removed `celery_worker`** — 5 services total, but CI no longer brings the stack up at all (see [CI/CD Pipeline](#-cicd-pipeline)), and the Celery task queue has no consumer by default (see [Phase 4 → Known Implementation Notes](#phase-4)).
 
 ---
 
