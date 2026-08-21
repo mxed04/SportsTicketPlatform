@@ -43,10 +43,22 @@ jobs:
           PGPASSWORD: test_password
         run: psql -h localhost -U test_user -d test_db -f database/scripts/seed.sql
 
-      - name: Create Stored Procedures & Triggers
+      - name: Create Stored Procedures & Functions
         env:
           PGPASSWORD: test_password
         run: psql -h localhost -U test_user -d test_db -f database/scripts/procedures.sql
+
+      # 🛡️ NEW: Execute Advanced Features (Triggers & Materialized Views)
+      - name: Setup Triggers & Materialized Views
+        env:
+          PGPASSWORD: test_password
+        run: psql -h localhost -U test_user -d test_db -f database/scripts/advanced.sql
+
+      # 🛡️ NEW: Execute Indexes (B-Tree & GIN)
+      - name: Create Indexes
+        env:
+          PGPASSWORD: test_password
+        run: psql -h localhost -U test_user -d test_db -f database/scripts/indexes.sql
 
       - name: Test Analytical Queries
         env:
