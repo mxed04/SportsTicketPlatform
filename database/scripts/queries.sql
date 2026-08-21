@@ -1,22 +1,22 @@
--- =============================================================================
+-- ===========================================================================
 -- Database Project: Analytical SQL Queries (Phase 2 - 22 Queries)
 -- File: queries.sql
 -- Database Engine: PostgreSQL
 -- Note: Destructive queries (UPDATE/DELETE) are strictly moved to the end!
--- =============================================================================
+-- ===========================================================================
 
--- -----------------------------------------------------------------------------
+-- ---------------------------------------------------------------------------
 -- PART 1: ANALYTICAL & INFORMATION QUERIES (SELECT) - Safe to run
--- -----------------------------------------------------------------------------
+-- ---------------------------------------------------------------------------
 
--- 1. First and last name of users who have never reserved any ticket (Optimized with NOT EXISTS)
+-- 1. First/last name of users with zero reservations (NOT EXISTS optimized)
 SELECT first_name, last_name 
 FROM users u
 WHERE NOT EXISTS (
     SELECT 1 FROM reservations r WHERE r.user_id = u.user_id
-) AND u.role = 'audience'; -- Ensuring we only list customers, not support staff
+) AND u.role = 'audience';
 
--- 2. First and last name of users who have purchased at least one ticket (successful payment)
+-- 2. First and last name of users who purchased at least one ticket
 SELECT DISTINCT u.first_name, u.last_name 
 FROM users u 
 JOIN payments p ON u.user_id = p.user_id 
@@ -26,7 +26,8 @@ WHERE p.status = 'successful';
 SELECT u.first_name, u.last_name, SUM(p.amount) AS total_paid 
 FROM payments p
 JOIN users u ON p.user_id = u.user_id
-WHERE p.status = 'successful' AND p.paid_at >= CURRENT_TIMESTAMP - INTERVAL '1 month' 
+WHERE p.status = 'successful' 
+  AND p.paid_at >= CURRENT_TIMESTAMP - INTERVAL '1 month' 
 GROUP BY u.user_id, u.first_name, u.last_name;
 
 -- 4. Users who purchased a ticket exactly once in each city
@@ -50,7 +51,7 @@ WHERE r.status = 'paid'
 ORDER BY t.created_at DESC 
 LIMIT 1;
 
--- 6. Phone number and email of users whose total spending exceeds average spending of ALL users
+-- 6. Contact info of users spending more than the overall average
 SELECT u.phone_number, u.email, SUM(p.amount) AS total_spending
 FROM users u 
 JOIN payments p ON u.user_id = p.user_id 
@@ -58,7 +59,10 @@ WHERE p.status = 'successful'
 GROUP BY u.user_id, u.phone_number, u.email 
 HAVING SUM(p.amount) > (
     SELECT AVG(user_total) FROM (
-        SELECT SUM(amount) AS user_total FROM payments WHERE status = 'successful' GROUP BY user_id
+        SELECT SUM(amount) AS user_total 
+        FROM payments 
+        WHERE status = 'successful' 
+        GROUP BY user_id
     ) AS avg_subquery
 );
 
@@ -73,7 +77,8 @@ GROUP BY t.sport_type;
 SELECT u.first_name, u.last_name, COUNT(r.reservation_id) AS ticket_count 
 FROM users u 
 JOIN reservations r ON u.user_id = r.user_id 
-WHERE r.status = 'paid' AND r.reserved_at >= CURRENT_TIMESTAMP - INTERVAL '1 week' 
+WHERE r.status = 'paid' 
+  AND r.reserved_at >= CURRENT_TIMESTAMP - INTERVAL '1 week' 
 GROUP BY u.user_id, u.first_name, u.last_name 
 ORDER BY ticket_count DESC 
 LIMIT 3;
@@ -91,12 +96,13 @@ AND r.status = 'paid'
 GROUP BY t.city
 ORDER BY sold_count DESC;
 
--- 10. Distinct cities where the oldest registered user in the system bought tickets
+-- 10. Distinct cities where the oldest registered user bought tickets
 SELECT DISTINCT t.city 
 FROM tickets t 
 JOIN reservations r ON t.ticket_id = r.ticket_id 
-WHERE r.user_id = (SELECT user_id FROM users ORDER BY created_at ASC LIMIT 1)
-  AND r.status = 'paid';
+WHERE r.user_id = (
+    SELECT user_id FROM users ORDER BY created_at ASC LIMIT 1
+) AND r.status = 'paid';
 
 -- 11. Names of support team members who manage the platform
 SELECT first_name, last_name 
@@ -111,7 +117,7 @@ WHERE r.status = 'paid'
 GROUP BY u.user_id, u.first_name, u.last_name 
 HAVING COUNT(r.reservation_id) >= 2;
 
--- 13. Names of users who bought at most 2 tickets for a specific sport (Active buyers only)
+-- 13. Users who bought at most 2 tickets for a specific sport (Active buyers)
 SELECT u.first_name, u.last_name, COUNT(r.reservation_id) AS football_tickets
 FROM users u 
 JOIN reservations r ON u.user_id = r.user_id 
@@ -120,17 +126,20 @@ WHERE t.sport_type = 'football' AND r.status = 'paid'
 GROUP BY u.user_id, u.first_name, u.last_name 
 HAVING COUNT(r.reservation_id) <= 2;
 
--- 14. Contact info of users who bought tickets across all available sport types
+-- 14. Contact info of users who bought tickets across ALL available sports
 SELECT u.first_name, u.last_name, u.phone_number 
 FROM users u 
 JOIN reservations r ON u.user_id = r.user_id 
 JOIN tickets t ON r.ticket_id = t.ticket_id 
 WHERE r.status = 'paid' 
 GROUP BY u.user_id, u.first_name, u.last_name, u.phone_number 
-HAVING COUNT(DISTINCT t.sport_type) = (SELECT COUNT(DISTINCT sport_type) FROM tickets);
+HAVING COUNT(DISTINCT t.sport_type) = (
+    SELECT COUNT(DISTINCT sport_type) FROM tickets
+);
 
 -- 15. Today's purchases grouped and ordered by hour
-SELECT EXTRACT(HOUR FROM p.paid_at) AS purchase_hour, COUNT(p.payment_id) AS tickets_sold
+SELECT EXTRACT(HOUR FROM p.paid_at) AS purchase_hour, 
+       COUNT(p.payment_id) AS tickets_sold
 FROM payments p 
 WHERE p.status = 'successful' AND DATE(p.paid_at) = CURRENT_DATE 
 GROUP BY EXTRACT(HOUR FROM p.paid_at)
@@ -152,8 +161,11 @@ SELECT
     s.first_name, s.last_name, 
     COUNT(r.reservation_id) AS cancel_count, 
     ROUND(
-        (COUNT(r.reservation_id) * 100.0 / NULLIF((SELECT COUNT(*) FROM reservations WHERE status = 'cancelled' AND cancelled_by_support_id IS NOT NULL), 0)), 
-        2
+        (COUNT(r.reservation_id) * 100.0 / NULLIF(
+            (SELECT COUNT(*) FROM reservations 
+             WHERE status = 'cancelled' 
+               AND cancelled_by_support_id IS NOT NULL), 0
+        )), 2
     ) AS cancel_percentage 
 FROM users s 
 JOIN reservations r ON s.user_id = r.cancelled_by_support_id 
@@ -163,7 +175,8 @@ ORDER BY cancel_count DESC
 LIMIT 1;
 
 -- 18. Report categories and counts for the most reported ticket
-SELECT (t.home_team || ' vs ' || t.away_team) AS ticket_name, rep.category, COUNT(rep.report_id) AS category_count 
+SELECT (t.home_team || ' vs ' || t.away_team) AS ticket_name, 
+       rep.category, COUNT(rep.report_id) AS category_count 
 FROM reports rep
 JOIN tickets t ON rep.ticket_id = t.ticket_id
 WHERE t.ticket_id = (
@@ -176,20 +189,18 @@ WHERE t.ticket_id = (
 ) 
 GROUP BY t.home_team, t.away_team, rep.category;
 
--- BONUS. Optimized query for upcoming match lookups leveraging B-Tree index
+-- BONUS. Optimized upcoming match lookup leveraging B-Tree index
 SELECT * FROM tickets 
-WHERE sport_type = 'football' AND city = 'Tehran' AND match_date >= CURRENT_TIMESTAMP 
+WHERE sport_type = 'football' 
+  AND city = 'Tehran' 
+  AND match_date >= CURRENT_TIMESTAMP 
 ORDER BY match_date ASC;
 
--- -----------------------------------------------------------------------------
+-- ---------------------------------------------------------------------------
 -- PART 2: DESTRUCTIVE QUERIES (UPDATE / DELETE) - Executed at the very end
--- -----------------------------------------------------------------------------
+-- ---------------------------------------------------------------------------
 
--- -----------------------------------------------------------------------------
--- PART 2: DESTRUCTIVE QUERIES (UPDATE / DELETE) - Executed at the very end
--- -----------------------------------------------------------------------------
-
--- 19. Change the surname of the user with the highest number of cancelled tickets to "Reddington"
+-- 19. Change surname of user with highest manual cancellations to "Reddington"
 UPDATE users 
 SET last_name = 'Reddington'
 WHERE user_id = (
@@ -202,7 +213,6 @@ WHERE user_id = (
 );
 
 -- 20. Delete all cancelled reservations belonging to user "Reddington"
--- First delete linked payments to respect Foreign Key (ON DELETE RESTRICT)
 DELETE FROM payments 
 WHERE reservation_id IN (
     SELECT r.reservation_id 
@@ -211,7 +221,6 @@ WHERE reservation_id IN (
     WHERE r.status = 'cancelled' AND u.last_name ILIKE '%Reddington%'
 );
 
--- Then delete the cancelled reservations
 DELETE FROM reservations 
 WHERE status = 'cancelled' 
   AND user_id IN (
@@ -219,15 +228,12 @@ WHERE status = 'cancelled'
   );
 
 -- 21. Clear all remaining cancelled reservations in the system
--- First delete all payments associated with cancelled reservations
 DELETE FROM payments 
 WHERE reservation_id IN (
     SELECT reservation_id FROM reservations WHERE status = 'cancelled'
 );
 
--- Then delete all remaining cancelled reservations
-DELETE FROM reservations 
-WHERE status = 'cancelled';
+DELETE FROM reservations WHERE status = 'cancelled';
 
 -- 22. Discount ticket prices by 10% for Azadi stadium matches created yesterday
 UPDATE tickets 
