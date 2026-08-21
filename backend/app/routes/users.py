@@ -118,7 +118,7 @@ def update_profile(
                 tuple(params),
             )
             cursor.connection.commit()
-            
+
             # Invalidate the profile cache after an update
             invalidate_user_profile_cache(user_id)
             return {
