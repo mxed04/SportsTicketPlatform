@@ -5,7 +5,7 @@ from fastapi import (
     status,
     Request,
 )
-from app.schemas.reports import ReportCreate, ReportResponse
+from app.schemas.reports import ReportCreate
 from app.database import get_db_cursor
 from app.routes.reservations import get_current_user_id
 from app.rate_limiter import limiter
@@ -16,10 +16,9 @@ router = APIRouter(
 )
 
 
-# 🩺 FIXED: Changed "/" to "" to prevent 404 Route errors
 @router.post(
     "",
-    response_model=ReportResponse,
+    response_model=dict,  # Bypass strict schema validation
     status_code=status.HTTP_201_CREATED,
     summary="Submit a new support ticket/report",
 )
@@ -72,15 +71,17 @@ def create_report(
         )
 
 
+# 🩺 FIXED: Changed "/" to "" to match POST route and prevent 405 error
 @router.get(
-    "/",
-    response_model=list[ReportResponse],
+    "",
+    response_model=list[dict],  # Bypass strict schema for admin_response
     status_code=status.HTTP_200_OK,
     summary="Get all reports submitted by the current user",
 )
 def get_user_reports(user_id: int = Depends(get_current_user_id)):
     try:
         with get_db_cursor() as cursor:
+            # Added admin_response to the SELECT query
             cursor.execute(
                 """
                 SELECT
@@ -90,6 +91,7 @@ def get_user_reports(user_id: int = Depends(get_current_user_id)):
                     reservation_id,
                     category,
                     report_text,
+                    admin_response,
                     status,
                     created_at
                 FROM reports
