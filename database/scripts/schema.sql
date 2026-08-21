@@ -1,9 +1,9 @@
--- =============================================================================
+-- ===========================================================================
 -- Database Project: Schema Definition (DDL)
 -- File: schema.sql
 -- Database Engine: PostgreSQL
--- Description: Creates custom ENUM types, core tables, and relational constraints.
--- =============================================================================
+-- Description: Custom ENUM types, core tables, and relational constraints.
+-- ===========================================================================
 
 -- Drop existing tables and custom types for a clean setup
 DROP TABLE IF EXISTS reports CASCADE;
@@ -24,7 +24,8 @@ DROP TYPE IF EXISTS sport_type_enum CASCADE;
 CREATE TYPE user_role AS ENUM ('audience', 'support', 'admin');
 CREATE TYPE reservation_status AS ENUM ('pending', 'paid', 'cancelled');
 CREATE TYPE payment_status AS ENUM ('successful', 'failed', 'pending');
-CREATE TYPE sport_type_enum AS ENUM ('football', 'volleyball', 'basketball');
+CREATE TYPE sport_type_enum AS ENUM 
+    ('football', 'volleyball', 'basketball');
 
 -- 1. Users Table
 CREATE TABLE users (
@@ -108,7 +109,8 @@ CREATE TABLE reservations (
 -- 7. Financial Transactions & Payments Table
 CREATE TABLE payments (
     payment_id SERIAL PRIMARY KEY,
-    reservation_id INT UNIQUE NOT NULL REFERENCES reservations(reservation_id) ON DELETE RESTRICT,
+    reservation_id INT UNIQUE NOT NULL 
+        REFERENCES reservations(reservation_id) ON DELETE RESTRICT,
     user_id INT NOT NULL REFERENCES users(user_id) ON DELETE RESTRICT,
     amount NUMERIC(10, 2) NOT NULL CHECK (amount >= 0),
     status payment_status DEFAULT 'pending',
@@ -121,9 +123,11 @@ CREATE TABLE reports (
     report_id SERIAL PRIMARY KEY,
     user_id INT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
     ticket_id INT REFERENCES tickets(ticket_id) ON DELETE SET NULL,
-    reservation_id INT REFERENCES reservations(reservation_id) ON DELETE SET NULL,
+    reservation_id INT REFERENCES reservations(reservation_id) 
+        ON DELETE SET NULL,
     category VARCHAR(100) NOT NULL,
     report_text TEXT NOT NULL,
+    admin_response TEXT, -- FIX: Admin response column restored for UI support
     status VARCHAR(50) DEFAULT 'under_review',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

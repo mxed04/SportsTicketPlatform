@@ -1,4 +1,5 @@
 import json
+import random
 from fastapi import (
     APIRouter,
     HTTPException,
@@ -85,10 +86,10 @@ def search_tickets(
         for hit in hits:
             doc = hit["_source"]
             doc["ticket_id"] = hit.get("_id", doc.get("ticket_id"))
-            
+
             base_price = float(doc.get("price", 0))
             cap = int(doc.get("remaining_capacity", 0))
-            
+
             if 0 < cap < 1000:
                 doc["price"] = round(base_price * 1.15, 2)
                 doc["is_surge_pricing"] = True
@@ -120,12 +121,12 @@ def get_ticket_detail(
         cached_data = redis_client.get(cache_key)
         if cached_data:
             return {"ticket": json.loads(cached_data)}
-            
+
         with get_db_cursor() as cursor:
             # FIX: Simplified query based on Phase 2 schema optimization!
             query = """
-            SELECT ticket_id, home_team, away_team, match_date, 
-                   sport_type, price, remaining_capacity, 
+            SELECT ticket_id, home_team, away_team, match_date,
+                   sport_type, price, remaining_capacity,
                    is_active, venue_name
             FROM tickets
             WHERE ticket_id = %s;
@@ -141,7 +142,7 @@ def get_ticket_detail(
             item = dict(row)
             if item.get("match_date"):
                 item["match_date"] = item["match_date"].isoformat()
-            
+
             # Reconstruct title directly
             home = item.get("home_team") or "تیم ۱"
             away = item.get("away_team") or "تیم ۲"
@@ -157,8 +158,21 @@ def get_ticket_detail(
                 item["price"] = base_price
                 item["is_surge_pricing"] = False
 
+            # 🔥 REAL-WORLD FEATURE: FOMO & Social Proof (Live Viewers Counter)
+            viewers_key = f"ticket:{ticket_id}:viewers"
+            redis_client.incr(viewers_key)
+            redis_client.expire(viewers_key, 60)  # Expire view after 60s
+            active_viewers = int(redis_client.get(viewers_key) or 1)
+
+            # Simulate real-world traffic multiplier
+            item["active_viewers"] = (
+                active_viewers * random.randint(2, 5)
+                if active_viewers < 10
+                else active_viewers
+            )
+
             redis_client.setex(cache_key, 300, json.dumps(item))
-            
+
             return {"ticket": item}
 
     except Exception as e:

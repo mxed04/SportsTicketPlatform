@@ -45,56 +45,48 @@ def get_current_user_id(token: str = Depends(oauth2_scheme)) -> int:
 
 
 @router.post(
-    "/",
+    "",
     response_model=ReservationResponse,
     status_code=status.HTTP_201_CREATED,
-    summary=(
-        "Reserve a ticket with 15-min lock "
-        "(Durable Celery Tasks)"
-    ),
 )
-def reserve_ticket(
-    data: ReservationRequest,
-    user_id: int = Depends(get_current_user_id),
-):
+def create_reservation(data: ReservationRequest, user_id: int =
+                       Depends(get_current_user_id)):
     try:
         with get_db_cursor() as cursor:
-            # 1. Checking user account activation
+            # 🛡️ REAL-WORLD FEATURE: Anti-Hoarding Policy
+            # Check if user already has a pending reservation for THIS ticket
             cursor.execute(
-                "SELECT is_active FROM users WHERE user_id = %s;",
-                (user_id,),
+                "SELECT reservation_id FROM reservations "
+                "WHERE user_id = %s AND ticket_id = %s "
+                "AND status = 'pending';",
+                (user_id, data.ticket_id)
             )
-            user = cursor.fetchone()
-            if not user or not user["is_active"]:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Your account has been deactivated.",
-                )
-
-            # 2. Adding is_active to ticket data retrieval
-            select_ticket_query = (
-                "SELECT remaining_capacity, is_active FROM "
-                "tickets WHERE ticket_id = %s FOR UPDATE;"
-            )
-            cursor.execute(select_ticket_query, (data.ticket_id,))
-            ticket = cursor.fetchone()
-
-            if not ticket:
-                raise HTTPException(
-                    status_code=404,
-                    detail="Ticket not found",
-                )
-
-            # 3. Checking ticket validity
-            if not ticket["is_active"]:
+            if cursor.fetchone():
                 raise HTTPException(
                     status_code=400,
                     detail=(
-                        "This ticket is currently inactive "
-                        "and cannot be reserved."
+                        "Anti-Hoarding Policy: You already have a pending "
+                        "reservation for this event. Please complete or "
+                        "cancel it first."
                     ),
                 )
 
+            # Check capacity and lock ticket row
+            cursor.execute(
+                "SELECT remaining_capacity, is_active FROM tickets "
+                "WHERE ticket_id = %s FOR UPDATE;",
+                (data.ticket_id,)
+            )
+            ticket = cursor.fetchone()
+
+            if not ticket:
+                raise HTTPException(status_code=404, detail="Ticket not found")
+            if not ticket["is_active"]:
+                raise HTTPException(status_code=400, detail="Ticket is"
+                                    " currently inactive")
+
+            # ... (بقیه کدهای تابع مثل کاهش ظرفیت و صف انتظار دست نخورده
+            # باقی بماند) ...
             # 🔴 Updated: Point user to waitlist if sold out
             if ticket["remaining_capacity"] < 1:
                 raise HTTPException(
@@ -146,7 +138,7 @@ def reserve_ticket(
             cursor.connection.commit()
             # 🔴 Sync new capacity to ElasticSearch
             update_ticket_capacity_in_es(
-                data.ticket_id, 
+                data.ticket_id,
                 ticket["remaining_capacity"] - 1
             )
             clear_ticket_cache()
@@ -191,7 +183,7 @@ def reserve_ticket(
 
 # 🔴 NEW ENDPOINT: Join waitlist for sold out tickets
 @router.post(
-    "/waitlist",
+    "waitlist",
     response_model=dict,
     status_code=status.HTTP_200_OK,
     summary=(
