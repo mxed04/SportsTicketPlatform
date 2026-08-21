@@ -279,11 +279,11 @@ All tables strictly satisfy the criteria for **Third Normal Form (3NF)**:
 
 ### 🔒 Integrity Constraints & Business Logic
 
-| Category                              | Implementation                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Value Constraints** (`CHECK`)       | Non-negative pricing (`price >= 0`), non-negative capacity (`remaining_capacity >= 0`), non-negative transaction amounts (`amount >= 0`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| **Temporal Logic**                    | Valid reservation time windows (`reserved_at < expires_at`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| **Domain Enumerations** (`ENUM`)      | `user_role`, `reservation_status`, `payment_status`, `sport_type_enum`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| Category                              | Implementation                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Value Constraints** (`CHECK`)       | Non-negative pricing (`price >= 0`), non-negative capacity (`remaining_capacity >= 0`), non-negative transaction amounts (`amount >= 0`)                                                                                                                                                                                                                                                                                                                                                                                       |
+| **Temporal Logic**                    | Valid reservation time windows (`reserved_at < expires_at`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| **Domain Enumerations** (`ENUM`)      | `user_role`, `reservation_status`, `payment_status`, `sport_type_enum`                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | **Referential Actions** (`ON DELETE`) | `CASCADE` — removes a ticket's extension row (`football_details` / `volleyball_details` / `basketball_details`) and any `reservations` when the owning `ticket` or `user` is deleted. `RESTRICT` — blocks deletion of any `user` or `reservation` that already has a `payments` record, protecting completed transactions from accidental loss. `SET NULL` — preserves `reports` when the referenced `ticket`/`reservation` is removed (`reports.ticket_id`, `reports.reservation_id`), and preserves a reservation's history when the cancelling support agent's account is removed (`reservations.cancelled_by_support_id`). |
 
 <br>
@@ -363,7 +363,7 @@ All tables strictly satisfy the criteria for **Third Normal Form (3NF)**:
 The query suite is split into two parts: safe, read-only analytics, and explicit, controlled data maintenance.
 
 | Category                    |       Query # (of 22)        | Representative Example                                                   |
-| --------------------------- | :--------------------------: | ------------------------------------------------------------------------ |
+| --------------------------- | :---------------------------: | -------------------------------------------------------------------------- |
 | User & Purchase Behaviour   | 1, 2, 3, 4, 6, 8, 12, 13, 14 | Users who never reserved a ticket; spenders above the platform average   |
 | Ticket & Sales Analytics    |   5, 7, 9, 10, 16, + Bonus   | 2nd best-selling ticket via `DENSE_RANK()`; index-optimized match lookup |
 | Time-Windowed Reporting     |              15              | Today's purchases grouped by hour                                        |
@@ -389,8 +389,8 @@ The query suite is split into two parts: safe, read-only analytics, and explicit
 |  4  | `search_tickets_by_keyword`               | `p_keyword VARCHAR`             | Free-text search across team, venue, spectator & league name |
 |  5  | `get_co_citizens_purchases`               | `p_contact VARCHAR`             | Purchases made by users from the same city                   |
 |  6  | `get_top_buyers_after_date`               | `p_date TIMESTAMP, p_limit INT` | Top-N buyers since a given date                              |
-|  7  | `get_cancelled_tickets_by_sport`          | `p_sport_type sport_type_enum`  | Cancelled reservations for one sport, newest first           |
-|  8  | `get_users_with_most_reports_by_category` | `p_category VARCHAR`            | Users most frequently reported in a given category           |
+|  7  | `get_cancelled_tickets_by_sport`          | `p_sport_type sport_type_enum`  | Cancelled reservations for one sport, newest first            |
+|  8  | `get_users_with_most_reports_by_category` | `p_category VARCHAR`            | Users most frequently reported in a given category            |
 
 > 🔎 **`search_tickets_by_keyword`** is the most structurally complex function: it `LEFT JOIN`s across **six tables** — `tickets`, `reservations`, `users`, `football_details`, `volleyball_details`, `basketball_details` — so a ticket with no reservation yet, or without a matching sport-specific row, is still returned instead of being silently excluded by an inner join. Note: as of Phase 4, live ticket search in the API no longer calls this function — see [Phase 4](#phase-4).
 
@@ -810,6 +810,24 @@ psql -d sports_ticket_db -f database/scripts/advanced.sql
 ```
 
 > ℹ️ The `pg_trgm` extension is enabled automatically by `indexes.sql` to support fast fuzzy text search on `tickets.venue_name`, `tickets.home_team`, `tickets.away_team`, `users.first_name`/`last_name`. As of Phase 4, the live ticket-search API endpoint uses ElasticSearch instead of these indexes, but `pg_trgm` and the trigram indexes remain in the schema and are still used by the `search_tickets_by_keyword` stored function from Phase 2.
+
+### 🖥️ Running the Phase 4 Client
+
+The client is a separate app under `frontend/` and isn't yet part of `docker-compose.yml`, so start the backend first (Option 1 above), then run the client with either of the following:
+
+```bash
+# Local dev server
+cd frontend
+npm install
+npm run dev          # → http://localhost:5173 by default
+
+# — or — standalone production container
+cd frontend
+docker build -t sports-ticket-frontend .
+docker run -p 8080:80 sports-ticket-frontend   # → http://localhost:8080
+```
+
+> ⚠️ The client's API base URL is hardcoded to `http://localhost:8000/api` in `src/api.js` (see [Phase 4](#phase-4)) — make sure the backend from Option 1 is already running on that port, and expect to edit that file and rebuild if you need to point the client anywhere else.
 
 ---
 
