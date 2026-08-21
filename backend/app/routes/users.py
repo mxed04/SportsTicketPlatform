@@ -1,14 +1,13 @@
-from backend.app import redis_client
-from fastapi import APIRouter, HTTPException, status, Depends
 import json
+from fastapi import APIRouter, HTTPException, status, Depends
 from app.schemas.users import BookingResponse, UserProfileUpdate
 from app.database import get_db_cursor
 from app.routes.reservations import get_current_user_id
-from app.redis_client import invalidate_user_profile_cache
+
+# 🛡️ FIXED: Corrected import path (removed "backend.app") to prevent 405
+from app.redis_client import redis_client, invalidate_user_profile_cache
 
 router = APIRouter(prefix="/api/user", tags=["User Profile"])
-
-# 🩺 FIXED: Missing GET Profile Endpoint (Needed for React Profile.jsx)
 
 
 @router.get(
@@ -34,7 +33,7 @@ def get_user_profile(user_id: int = Depends(get_current_user_id)):
             if not user:
                 raise HTTPException(status_code=404, detail="User not found")
 
-            # Cache for 20 mins
+            # Cache profile data for 20 minutes
             redis_client.setex(cache_key, 1200, json.dumps(user))
             return {"user": user}
     except Exception as e:
@@ -109,7 +108,7 @@ def update_profile(
 
             if not updates:
                 raise HTTPException(
-                    status_code=400, detail="No data provided to update"
+                    status_code=400, detail="No data to update"
                 )
 
             params.append(user_id)
@@ -119,9 +118,11 @@ def update_profile(
                 tuple(params),
             )
             cursor.connection.commit()
+            
+            # Invalidate the profile cache after an update
             invalidate_user_profile_cache(user_id)
             return {
-                "message": "Profile updated successfully. Cache invalidated."
+                "message": "Profile updated successfully."
             }
     except Exception as e:
         detail = f"Database error: {e}"
