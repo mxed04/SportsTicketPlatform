@@ -45,7 +45,7 @@ export default function Profile() {
           console.error("Profile fetch error", e);
         }
 
-        // 2. Fetch Bookings
+        // 2. Fetch Bookings (Now includes QR and tracking_code)
         const response = await api.get('/user/bookings');
         const rawData = response.data?.bookings || response.data || [];
         const bookingsList = Array.isArray(rawData) ? rawData : [];
@@ -182,9 +182,15 @@ export default function Profile() {
       <header className="bg-white/5 border-b border-white/10 sticky top-0 z-30 backdrop-blur-md">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 h-20 flex items-center justify-between">
           <h1 className="text-lg font-bold text-white tracking-tight">👤 User Profile</h1>
-          <button onClick={() => navigate('/dashboard')} className="text-xs font-semibold text-indigo-400 hover:text-indigo-300 transition-colors">
-            ← Back to Dashboard
-          </button>
+          <div className="flex gap-4">
+            {/* 🎧 Added Support Button */}
+            <button onClick={() => navigate('/support')} className="text-xs font-semibold text-gray-300 hover:text-white transition-colors flex items-center gap-1">
+              <span>🎧 Support</span>
+            </button>
+            <button onClick={() => navigate('/dashboard')} className="text-xs font-semibold text-indigo-400 hover:text-indigo-300 transition-colors">
+              ← Dashboard
+            </button>
+          </div>
         </div>
       </header>
 
@@ -272,33 +278,49 @@ export default function Profile() {
                     const visual = getStatusVisuals(status);
 
                     return (
-                      <div key={bookingId || index} className={`flex flex-col sm:flex-row justify-between border p-5 rounded-2xl items-center transition-all ${
+                      <div key={bookingId || index} className={`flex flex-col border p-5 rounded-2xl transition-all ${
                         status === 'pending' ? 'bg-amber-500/5 border-amber-500/30' : 'bg-black/30 border-white/10'
                       }`}>
-                        <div className="flex-1 w-full mb-4 sm:mb-0">
-                          <div className="flex items-center gap-3 mb-2">
-                            <span className="font-extrabold text-white text-base">{title}</span>
-                            <span className={`text-[10px] px-2.5 py-1 rounded-full font-bold border ${visual.color}`}>{visual.label}</span>
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
+                          <div className="flex-1 w-full mb-4 sm:mb-0">
+                            <div className="flex items-center gap-3 mb-2">
+                              <span className="font-extrabold text-white text-base">{title}</span>
+                              <span className={`text-[10px] px-2.5 py-1 rounded-full font-bold border ${visual.color}`}>{visual.label}</span>
+                            </div>
+                            <div className="text-xs text-gray-400 flex flex-wrap gap-2">
+                              <span className="bg-white/5 px-2.5 py-1 border border-white/10 rounded-lg">ID: #{bookingId}</span>
+                              {price && <span className="bg-white/5 px-2.5 py-1 border border-white/10 rounded-lg font-semibold text-emerald-400">{Number(price).toLocaleString()} Toman</span>}
+                              <span className="bg-white/5 px-2.5 py-1 border border-white/10 rounded-lg">Date: {matchDate}</span>
+                            </div>
                           </div>
-                          <div className="text-xs text-gray-400 flex flex-wrap gap-2">
-                            <span className="bg-white/5 px-2.5 py-1 border border-white/10 rounded-lg">ID: #{bookingId}</span>
-                            {price && <span className="bg-white/5 px-2.5 py-1 border border-white/10 rounded-lg font-semibold text-emerald-400">{Number(price).toLocaleString()} Toman</span>}
-                            <span className="bg-white/5 px-2.5 py-1 border border-white/10 rounded-lg">Date: {matchDate}</span>
+                          
+                          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                            {status === 'pending' && (
+                              <button onClick={() => handleResumePayment(booking)} className="w-full sm:w-auto px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold transition-all text-xs uppercase tracking-wider animate-pulse shadow-lg shadow-indigo-500/20">
+                                Resume Payment
+                              </button>
+                            )}
+                            {(status === 'paid' || status === 'pending') && (
+                              <button onClick={() => handleCancelTicket(bookingId, status)} disabled={cancelingId === bookingId} className="w-full sm:w-auto px-5 py-2.5 bg-white/5 border border-rose-500/30 text-rose-400 rounded-xl hover:bg-rose-500/10 font-bold transition-all disabled:opacity-50 text-xs uppercase tracking-wider">
+                                {cancelingId === bookingId ? 'Processing...' : 'Cancel Ticket'}
+                              </button>
+                            )}
                           </div>
                         </div>
-                        
-                        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-                          {status === 'pending' && (
-                            <button onClick={() => handleResumePayment(booking)} className="w-full sm:w-auto px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold transition-all text-xs uppercase tracking-wider animate-pulse shadow-lg shadow-indigo-500/20">
-                              Resume Payment
-                            </button>
-                          )}
-                          {(status === 'paid' || status === 'pending') && (
-                            <button onClick={() => handleCancelTicket(bookingId, status)} disabled={cancelingId === bookingId} className="w-full sm:w-auto px-5 py-2.5 bg-white/5 border border-rose-500/30 text-rose-400 rounded-xl hover:bg-rose-500/10 font-bold transition-all disabled:opacity-50 text-xs uppercase tracking-wider">
-                              {cancelingId === bookingId ? 'Processing...' : 'Cancel Ticket'}
-                            </button>
-                          )}
-                        </div>
+
+                        {/* 🧾 E-TICKET QR CODE SECTION */}
+                        {status === 'paid' && booking.qr_code && (
+                          <div className="mt-5 pt-4 border-t border-white/10 flex flex-col sm:flex-row items-center gap-5 bg-white/[0.02] p-4 rounded-xl">
+                            <img src={booking.qr_code} alt="Ticket QR" className="w-20 h-20 rounded-xl bg-white p-1.5 shadow-lg" />
+                            <div className="text-center sm:text-left">
+                              <span className="block text-[10px] text-gray-400 uppercase tracking-wider mb-1">Official E-Ticket / Bank Ref</span>
+                              <span className="text-sm font-mono font-bold text-white tracking-widest bg-white/5 px-3 py-1.5 rounded-lg border border-white/10 inline-block shadow-inner">
+                                {booking.tracking_code || 'TRK-PENDING'}
+                              </span>
+                              <p className="text-[9px] text-gray-500 mt-2">Present this QR code at the stadium gates for entry.</p>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })}

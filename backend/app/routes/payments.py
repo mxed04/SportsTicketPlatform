@@ -1,5 +1,4 @@
 from datetime import datetime
-import uuid
 import io
 import base64
 import json
@@ -66,9 +65,6 @@ def process_payment(
             base_price = float(res["price"])
             cap = res["remaining_capacity"]
 
-            # Since this user already took 1 seat, the capacity BEFORE
-            # their reservation was cap + 1.
-            # We must check (cap + 1) < 1000 to prevent false surge!
             is_surge = (cap + 1) < 1000
             final_price = base_price * 1.15 if is_surge else base_price
 
@@ -98,21 +94,22 @@ def process_payment(
             )
             cursor.connection.commit()
 
-            # 🧾 6. REAL-WORLD FEATURE: Mock Bank Tracking Code
-            tracking_code = f"TRK-{uuid.uuid4().hex[:8].upper()}"
+            # 🧾 6. DETERMINISTIC Bank Tracking Code (No DB Change Required)
+            pid = payment["payment_id"]
+            tracking_code = f"TRK-{pid:06d}-BK"
 
             # 🚀 7. Sync capacity with ES and clear cache
             try:
                 update_ticket_capacity_in_es(res["ticket_id"], cap)
                 clear_ticket_cache()
             except Exception:
-                pass  # Do not block payment if cache sync fails
+                pass
 
-            # 8. Generate QR Code (Now includes Bank Tracking Code!)
+            # 8. Generate QR Code
             ticket_data = {
                 "reservation_id": data.reservation_id,
                 "ticket_id": res["ticket_id"],
-                "payment_id": payment["payment_id"],
+                "payment_id": pid,
                 "amount": float(payment["amount"]),
                 "tracking_code": tracking_code,
             }
@@ -126,7 +123,7 @@ def process_payment(
             qr_uri = f"data:image/png;base64,{qr_b64}"
 
             return {
-                "payment_id": payment["payment_id"],
+                "payment_id": pid,
                 "reservation_id": data.reservation_id,
                 "amount": float(payment["amount"]),
                 "status": "successful",
@@ -152,7 +149,6 @@ def calculate_cancellation_penalty(
 ):
     try:
         with get_db_cursor() as cursor:
-            # 1. Fetch metadata required for the response
             cursor.execute(
                 """
                 SELECT r.status, t.match_date
@@ -170,7 +166,6 @@ def calculate_cancellation_penalty(
                     detail="Reservation not found",
                 )
 
-            # 2. Use the ROCK-SOLID DB function for exact financial numbers
             cursor.execute(
                 "SELECT refund_amount, penalty_amount "
                 "FROM calculate_cancellation_penalty(%s);",
@@ -178,7 +173,6 @@ def calculate_cancellation_penalty(
             )
             fin = cursor.fetchone()
 
-            # 3. Calculate hours remaining until match
             now = datetime.now()
             if meta["match_date"] <= now and meta["status"] == "paid":
                 raise HTTPException(status_code=400, detail="Match started")
@@ -186,7 +180,6 @@ def calculate_cancellation_penalty(
             diff = (meta["match_date"] - now).total_seconds()
             hours_until = diff / 3600 if diff > 0 else 0
 
-            # 4. Determine penalty percentage for UI
             penalty_pct = 0
             if fin["penalty_amount"] > 0:
                 total = fin["refund_amount"] + fin["penalty_amount"]
@@ -215,13 +208,11 @@ def cancel_ticket(
     request: CancelTicketRequest,
     user_id: int = Depends(get_current_user_id),
 ):
-    # Call the updated endpoint logic to calculate penalties
     penalty_data = calculate_cancellation_penalty(
         request.reservation_id, user_id
     )
     try:
         with get_db_cursor() as cursor:
-            # Lock reservation for update
             cursor.execute(
                 "SELECT status, ticket_id FROM reservations "
                 "WHERE reservation_id = %s FOR UPDATE;",
@@ -244,14 +235,12 @@ def cancel_ticket(
 
             is_pending = res["status"] == "pending"
 
-            # Mark reservation as cancelled
             cursor.execute(
                 "UPDATE reservations SET status = 'cancelled' "
                 "WHERE reservation_id = %s;",
                 (request.reservation_id,),
             )
 
-            # Mark payment as failed if it was paid
             if not is_pending:
                 cursor.execute(
                     "UPDATE payments SET status = 'failed' "
@@ -259,7 +248,6 @@ def cancel_ticket(
                     (request.reservation_id,),
                 )
 
-            # Release capacity back to the pool
             cursor.execute(
                 "SELECT remaining_capacity FROM tickets "
                 "WHERE ticket_id = %s FOR UPDATE;",
@@ -275,7 +263,6 @@ def cancel_ticket(
             )
             cursor.connection.commit()
 
-            # Sync capacity with ES and clear caches
             update_ticket_capacity_in_es(res["ticket_id"], current_cap + 1)
             clear_ticket_cache()
             pop_from_waitlist(res["ticket_id"])

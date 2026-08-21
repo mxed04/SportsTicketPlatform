@@ -107,6 +107,14 @@ export default function Dashboard() {
               <span>👤 My Profile</span>
             </button>
 
+            {/* 🎧 Added Support Button Here */}
+            <button
+              onClick={() => navigate('/support')}
+              className="px-4 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-xs font-semibold text-gray-200 transition-all flex items-center gap-2"
+            >
+              <span>🎧 Support</span>
+            </button>
+
             {userRole === 'admin' && (
               <button
                 onClick={() => navigate('/admin')}
