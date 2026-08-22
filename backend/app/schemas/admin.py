@@ -34,7 +34,7 @@ class AdminReservationResponse(BaseModel):
 # Schema for admin reply payload
 class AdminReportReplyRequest(BaseModel):
     admin_response: str = Field(
-        ..., min_length=1, examples=["پاسخ پشتیبانی ثبت شد."]
+        ..., min_length=1, examples=["The support response has been recorded."]
     )
     status: str = Field("resolved", examples=["resolved"])
 
@@ -51,3 +51,19 @@ class AdminReportResponse(BaseModel):
     admin_response: Optional[str] = None
     status: str
     created_at: datetime
+
+
+# 🚀 NEW: Schema for creating a new ticket by admin
+class TicketCreateRequest(BaseModel):
+    home_team: str = Field(..., min_length=1, examples=["Real Madrid"])
+    away_team: str = Field(..., min_length=1, examples=["Barcelona"])
+    sport_type: Literal["football", "volleyball", "basketball"] = Field(
+        ..., examples=["football"]
+    )
+    ticket_tier: str = Field(..., examples=["VIP"])
+    organizer: str = Field(..., examples=["FIFA"])
+    venue_name: str = Field(..., examples=["Santiago Bernabeu"])
+    city: str = Field(..., examples=["Madrid"])
+    match_date: datetime
+    price: float = Field(..., ge=0.0, examples=[1500000.0])
+    remaining_capacity: int = Field(..., ge=0, examples=[150])
