@@ -31,15 +31,15 @@ class AdminReservationResponse(BaseModel):
     payment_amount: float | None = None
 
 
-# Schema for admin reply payload
 class AdminReportReplyRequest(BaseModel):
     admin_response: str = Field(
-        ..., min_length=1, examples=["The support response has been recorded."]
+        ...,
+        min_length=1,
+        examples=["The support response has been recorded."]
     )
     status: str = Field("resolved", examples=["resolved"])
 
 
-# Schema for returning reports list to admin dashboard
 class AdminReportResponse(BaseModel):
     report_id: int
     user_id: int
@@ -53,7 +53,6 @@ class AdminReportResponse(BaseModel):
     created_at: datetime
 
 
-# 🚀 NEW: Schema for creating a new ticket by admin
 class TicketCreateRequest(BaseModel):
     home_team: str = Field(..., min_length=1, examples=["Real Madrid"])
     away_team: str = Field(..., min_length=1, examples=["Barcelona"])
@@ -67,3 +66,12 @@ class TicketCreateRequest(BaseModel):
     match_date: datetime
     price: float = Field(..., ge=0.0, examples=[1500000.0])
     remaining_capacity: int = Field(..., ge=0, examples=[150])
+
+
+# 🚀 NEW: Schema for Audit Logs
+class AuditLogResponse(BaseModel):
+    log_id: int
+    reservation_id: int
+    old_status: Optional[str] = None
+    new_status: Optional[str] = None
+    changed_at: datetime

@@ -6,10 +6,9 @@ from app.schemas.admin import (
     AdminManageRequest,
     AdminReportReplyRequest,
     DashboardStatsResponse,
-    TicketCreateRequest,  # 🚀 NEW: Import Schema
+    TicketCreateRequest,
 )
 
-# 🚀 NEW: Import ES syncing helpers
 from app.es_client import index_ticket_in_es, delete_ticket_in_es
 
 router = APIRouter(prefix="/api/admin", tags=["Admin Dashboard"])
@@ -18,7 +17,6 @@ router = APIRouter(prefix="/api/admin", tags=["Admin Dashboard"])
 def verify_admin_or_support_role(
     user_id: int = Depends(get_current_user_id),
 ) -> int:
-    """Verifies if the current user holds admin or support privileges."""
     with get_db_cursor() as cursor:
         cursor.execute(
             "SELECT role FROM users WHERE user_id = %s;",
@@ -244,7 +242,6 @@ def get_all_tickets_admin(
         )
 
 
-# 🚀 NEW: Admin Ticket Creation Route with Two-Way ES Sync
 @router.post(
     "/tickets",
     status_code=status.HTTP_201_CREATED,
@@ -277,7 +274,6 @@ def create_ticket(
             ticket_id = new_ticket["ticket_id"]
             cursor.connection.commit()
 
-            # 🚀 Sync to ElasticSearch immediately
             es_doc = {
                 "ticket_id": ticket_id,
                 "home_team": data.home_team,
@@ -300,7 +296,6 @@ def create_ticket(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# 🚀 NEW: Admin Ticket Deletion Route with Two-Way ES Sync
 @router.delete(
     "/tickets/{ticket_id}",
     status_code=status.HTTP_200_OK,
@@ -324,7 +319,6 @@ def delete_ticket(
                 )
             cursor.connection.commit()
 
-            # 🚀 Remove from ElasticSearch immediately
             delete_ticket_in_es(ticket_id)
 
             return {"message": f"Ticket {ticket_id} deleted permanently."}
@@ -332,3 +326,28 @@ def delete_ticket(
         if isinstance(e, HTTPException):
             raise e
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# 🚀 NEW: Route to fetch Audit Logs for the Admin Dashboard
+@router.get(
+    "/audit-logs",
+    status_code=status.HTTP_200_OK,
+    summary="Retrieve system audit logs for reservations",
+)
+def get_system_audit_logs(
+    user_id: int = Depends(verify_admin_or_support_role),
+):
+    try:
+        with get_db_cursor() as cursor:
+            cursor.execute(
+                "SELECT log_id, reservation_id, old_status, "
+                "new_status, changed_at "
+                "FROM reservation_audit_logs "
+                "ORDER BY changed_at DESC LIMIT 100;"
+            )
+            return cursor.fetchall()
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        )
