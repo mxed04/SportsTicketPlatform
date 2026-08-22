@@ -33,7 +33,6 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState(null);
 
-  // 🚀 NEW: Advanced Search & Filter States
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSport, setSelectedSport] = useState('all');
   const [venue, setVenue] = useState('');
@@ -45,7 +44,6 @@ export default function Dashboard() {
     setUserRole(getUserRole());
   }, []);
 
-  // Fetch tickets via ElasticSearch endpoint with Advanced Filters
   useEffect(() => {
     const fetchTickets = async () => {
       setLoading(true);
@@ -84,7 +82,7 @@ export default function Dashboard() {
 
     const timer = setTimeout(() => {
       fetchTickets();
-    }, 500); // 500ms debounce for typing performance
+    }, 500);
 
     return () => clearTimeout(timer);
   }, [searchQuery, selectedSport, venue, minPrice, maxPrice]);
@@ -96,7 +94,6 @@ export default function Dashboard() {
     navigate('/');
   };
 
-  // Shared Tailwind Classes
   const navBtnClass = 
     "px-4 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 " +
     "rounded-xl text-xs font-semibold text-gray-200 transition-all " +
@@ -110,25 +107,19 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-gray-100 font-sans pb-16">
       <header 
-        className="bg-white/5 border-b border-white/10 sticky top-0 z-30 "
+        className="bg-white/5 border-b border-white/10 sticky top-0 z-30"
       >
-        <div 
-          className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 "
-        >
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20">
           <div className="flex items-center justify-between h-full">
             <div className="flex items-center gap-3">
-              <div 
-                className="w-10 h-10 rounded-xl flex items-center "
-              >
+              <div className="w-10 h-10 rounded-xl flex items-center">
                 <span className="text-xl">🎟️</span>
               </div>
               <div>
                 <h1 className="text-lg font-bold text-white tracking-tight">
                   Sports<span className="text-indigo-400">Ticket</span>
                 </h1>
-                <p 
-                  className="text-[10px] text-gray-400 font-medium "
-                >
+                <p className="text-[10px] text-gray-400 font-medium">
                   Event Booking Portal
                 </p>
               </div>
@@ -179,12 +170,13 @@ export default function Dashboard() {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8">
         <div className="mb-10 text-center max-w-3xl mx-auto">
-          <h2 
-            className="text-3xl sm:text-4xl font-extrabold text-white "
-          >
+          <h2 className="text-3xl sm:text-4xl font-extrabold text-white">
             Find & Reserve 
             <span 
-              className="text-transparent bg-clip-text bg-gradient-to-r "
+              className={
+                "text-transparent bg-clip-text bg-gradient-to-r " +
+                "from-indigo-400 to-blue-400"
+              }
             >
               {" "}Live Sports Tickets
             </span>
@@ -193,13 +185,8 @@ export default function Dashboard() {
             Sub-second ElasticSearch query engine with real-time tracking.
           </p>
 
-          {/* Search Bar Container */}
-          <div 
-            className="flex flex-col sm:flex-row gap-3 bg-white/5 border "
-          >
-            <div 
-              className="flex flex-col sm:flex-row gap-3 w-full "
-            >
+          <div className="flex flex-col sm:flex-row gap-3 bg-white/5 border">
+            <div className="flex flex-col sm:flex-row gap-3 w-full">
               <div className="relative flex-1">
                 <input
                   type="text"
@@ -211,16 +198,12 @@ export default function Dashboard() {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
-                <span 
-                  className="absolute left-4 top-1/2 -translate-y-1/2 "
-                >
+                <span className="absolute left-4 top-1/2 -translate-y-1/2">
                   🔍
                 </span>
               </div>
 
-              <div 
-                className="flex bg-black/40 p-1 rounded-xl border "
-              >
+              <div className="flex bg-black/40 p-1 rounded-xl border">
                 {['all', 'football', 'basketball', 'volleyball'].map(
                   (sport) => (
                     <button
@@ -253,11 +236,8 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* 🚀 NEW: Advanced Filters Panel */}
           {showFilters && (
-            <div 
-              className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3 "
-            >
+            <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
               <input
                 type="text"
                 placeholder="Specific Stadium / Venue"
@@ -271,6 +251,8 @@ export default function Dashboard() {
                 className={advInputClass}
                 value={minPrice}
                 onChange={(e) => setMinPrice(e.target.value)}
+                step="10000"
+                min="0"
               />
               <input
                 type="number"
@@ -278,6 +260,8 @@ export default function Dashboard() {
                 className={advInputClass}
                 value={maxPrice}
                 onChange={(e) => setMaxPrice(e.target.value)}
+                step="10000"
+                min="0"
               />
             </div>
           )}
@@ -290,9 +274,7 @@ export default function Dashboard() {
             Searching ElasticSearch database...
           </div>
         ) : tickets.length === 0 ? (
-          <div 
-            className="text-center py-20 bg-white/5 rounded-3xl border "
-          >
+          <div className="text-center py-20 bg-white/5 rounded-3xl border">
             <span className="text-5xl block mb-4">🎟️</span>
             <h3 className="text-lg font-bold text-white mb-1">
               No Tickets Found
@@ -332,40 +314,30 @@ export default function Dashboard() {
                   }
                 >
                   <div className="flex justify-between items-center mb-5">
-                    <span 
-                      className="text-[10px] font-bold uppercase "
-                    >
+                    <span className="text-[10px] font-bold uppercase">
                       ⚽ {sport}
                     </span>
                     {isSurge && (
-                      <span 
-                        className="text-[10px] font-bold uppercase "
-                      >
+                      <span className="text-[10px] font-bold uppercase">
                         🔥 High Demand
                       </span>
                     )}
                   </div>
 
                   <div className="mb-6">
-                    <h3 
-                      className="text-xl font-extrabold text-white "
-                    >
+                    <h3 className="text-xl font-extrabold text-white">
                       {homeTeam}{" "}
                       <span className="text-xs text-gray-500 font-normal">
                         vs
                       </span>{" "}
                       {awayTeam}
                     </h3>
-                    <p 
-                      className="text-xs text-gray-400 mt-1 flex items-center"
-                    >
+                    <p className="text-xs text-gray-400 mt-1 flex items-center">
                       <span>📍</span> {venName}
                     </p>
                   </div>
 
-                  <div 
-                    className="bg-black/30 rounded-2xl p-4 border "
-                  >
+                  <div className="bg-black/30 rounded-2xl p-4 border">
                     <div className="flex justify-between mb-2">
                       <span className="text-gray-500 text-xs">Date:</span>
                       <span className="font-semibold text-gray-200 text-xs">
@@ -383,9 +355,7 @@ export default function Dashboard() {
                         {remaining} remaining
                       </span>
                     </div>
-                    <div 
-                      className="flex justify-between items-center pt-2 "
-                    >
+                    <div className="flex justify-between items-center pt-2">
                       <span className="text-gray-500 text-xs">Price:</span>
                       <span 
                         className="text-base font-extrabold text-emerald-400"
