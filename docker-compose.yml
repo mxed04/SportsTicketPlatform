@@ -85,6 +85,9 @@ services:
         condition: service_healthy
       postgres_db:
         condition: service_healthy
+      # 🚀 FIXED: Celery now requires ElasticSearch for capacity syncing
+      elasticsearch:
+        condition: service_healthy
     volumes:
       - ./backend:/app
 
