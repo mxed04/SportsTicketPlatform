@@ -71,7 +71,23 @@ services:
     volumes:
       - ./backend:/app
 
-  # 🔴 NEW: Frontend Service Added Here
+  celery_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sports_ticket_celery_worker
+    restart: always
+    env_file:
+      - .env
+    command: celery -A app.core.celery_app worker --loglevel=info
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres_db:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+
   frontend:
     build:
       context: ./frontend
