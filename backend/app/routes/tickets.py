@@ -11,8 +11,6 @@ from fastapi import (
 from app.database import get_db_cursor
 from app.redis_client import redis_client
 from app.rate_limiter import limiter
-
-# Import Elasticsearch client
 from app.es_client import es, INDEX_NAME
 
 router = APIRouter(prefix="/api/tickets", tags=["Tickets"])
@@ -22,14 +20,14 @@ router = APIRouter(prefix="/api/tickets", tags=["Tickets"])
     "/search",
     response_model=dict,
     status_code=status.HTTP_200_OK,
-    summary="ElasticSearch Ticket Search with Surge Pricing & Fuzzy Match",
+    summary="ElasticSearch Ticket Search with Surge Pricing",
 )
 @limiter.limit("100/minute")
 def search_tickets(
     request: Request,
     q: str | None = Query(None, description="General search query"),
     sport_type: str | None = Query(None, description="Sport type"),
-    venue: str | None = Query(None, description="Venue/stadium name"),
+    venue: str | None = Query(None, description="Venue name"),
     min_price: float | None = Query(None, ge=0),
     max_price: float | None = Query(None, ge=0),
 ):
@@ -65,13 +63,43 @@ def search_tickets(
                 }
             })
 
+        # 🚀 FIXED: Dynamic ES range handling for Surge Pricing (15%)
         if min_price is not None or max_price is not None:
-            price_range = {}
+            n_rng, s_rng = {}, {}
             if min_price is not None:
-                price_range["gte"] = min_price
+                n_rng["gte"] = min_price
+                s_rng["gte"] = min_price / 1.15
             if max_price is not None:
-                price_range["lte"] = max_price
-            must_clauses.append({"range": {"price": price_range}})
+                n_rng["lte"] = max_price
+                s_rng["lte"] = max_price / 1.15
+
+            must_clauses.append({
+                "bool": {
+                    "should": [
+                        {
+                            "bool": {
+                                "must": [
+                                    {"range": {
+                                        "remaining_capacity": {"gte": 1000}
+                                    }},
+                                    {"range": {"price": n_rng}}
+                                ]
+                            }
+                        },
+                        {
+                            "bool": {
+                                "must": [
+                                    {"range": {
+                                        "remaining_capacity": {"lt": 1000}
+                                    }},
+                                    {"range": {"price": s_rng}}
+                                ]
+                            }
+                        }
+                    ],
+                    "minimum_should_match": 1
+                }
+            })
 
         es_query = {
             "query": {"bool": {"must": must_clauses}},
@@ -79,22 +107,22 @@ def search_tickets(
             "size": 50,
         }
 
-        response = es.search(index=INDEX_NAME, body=es_query)
-        hits = response["hits"]["hits"]
+        res = es.search(index=INDEX_NAME, body=es_query)
+        hits = res["hits"]["hits"]
 
         results = []
         for hit in hits:
             doc = hit["_source"]
             doc["ticket_id"] = hit.get("_id", doc.get("ticket_id"))
 
-            base_price = float(doc.get("price", 0))
+            bp = float(doc.get("price", 0))
             cap = int(doc.get("remaining_capacity", 0))
 
             if 0 < cap < 1000:
-                doc["price"] = round(base_price * 1.15, 2)
+                doc["price"] = round(bp * 1.15, 2)
                 doc["is_surge_pricing"] = True
             else:
-                doc["price"] = base_price
+                doc["price"] = bp
                 doc["is_surge_pricing"] = False
 
             results.append(doc)
@@ -118,12 +146,11 @@ def get_ticket_detail(
 ):
     cache_key = f"ticket_detail:{ticket_id}"
     try:
-        cached_data = redis_client.get(cache_key)
-        if cached_data:
-            return {"ticket": json.loads(cached_data)}
+        cached = redis_client.get(cache_key)
+        if cached:
+            return {"ticket": json.loads(cached)}
 
         with get_db_cursor() as cursor:
-            # FIX: Simplified query based on Phase 2 schema optimization!
             query = """
             SELECT ticket_id, home_team, away_team, match_date,
                    sport_type, price, remaining_capacity,
@@ -143,28 +170,26 @@ def get_ticket_detail(
             if item.get("match_date"):
                 item["match_date"] = item["match_date"].isoformat()
 
-            # Reconstruct title directly
-            home = item.get("home_team") or "تیم ۱"
-            away = item.get("away_team") or "تیم ۲"
+            # Ensure English defaults
+            home = item.get("home_team") or "Team A"
+            away = item.get("away_team") or "Team B"
             item["title"] = f"{home} vs {away}"
 
-            base_price = float(item["price"])
-            remaining = int(item["remaining_capacity"])
+            bp = float(item["price"])
+            rem = int(item["remaining_capacity"])
 
-            if 0 < remaining < 1000:
-                item["price"] = round(base_price * 1.15, 2)
+            if 0 < rem < 1000:
+                item["price"] = round(bp * 1.15, 2)
                 item["is_surge_pricing"] = True
             else:
-                item["price"] = base_price
+                item["price"] = bp
                 item["is_surge_pricing"] = False
 
-            # 🔥 REAL-WORLD FEATURE: FOMO & Social Proof (Live Viewers Counter)
-            viewers_key = f"ticket:{ticket_id}:viewers"
-            redis_client.incr(viewers_key)
-            redis_client.expire(viewers_key, 60)  # Expire view after 60s
-            active_viewers = int(redis_client.get(viewers_key) or 1)
+            v_key = f"ticket:{ticket_id}:viewers"
+            redis_client.incr(v_key)
+            redis_client.expire(v_key, 60)
+            active_viewers = int(redis_client.get(v_key) or 1)
 
-            # Simulate real-world traffic multiplier
             item["active_viewers"] = (
                 active_viewers * random.randint(2, 5)
                 if active_viewers < 10
