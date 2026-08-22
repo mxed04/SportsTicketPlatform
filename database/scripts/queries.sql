@@ -147,14 +147,19 @@ ORDER BY purchase_hour ASC;
 
 -- 16. Second most popular ticket overall (Handled with DENSE_RANK for ties)
 WITH RankedTickets AS (
-    SELECT t.home_team, t.away_team, COUNT(r.reservation_id) AS sold_count,
-           DENSE_RANK() OVER (ORDER BY COUNT(r.reservation_id) DESC) as rank
+    SELECT t.home_team, t.away_team, 
+           COUNT(r.reservation_id) AS sold_count,
+           DENSE_RANK() OVER (
+               ORDER BY COUNT(r.reservation_id) DESC
+           ) AS rank
     FROM tickets t 
     JOIN reservations r ON t.ticket_id = r.ticket_id 
     WHERE r.status = 'paid' 
     GROUP BY t.ticket_id, t.home_team, t.away_team
 )
-SELECT home_team, away_team, sold_count FROM RankedTickets WHERE rank = 2;
+SELECT home_team, away_team, sold_count 
+FROM RankedTickets 
+WHERE rank = 2;
 
 -- 17. Support staff with highest number of cancellations and their percentage
 SELECT 
