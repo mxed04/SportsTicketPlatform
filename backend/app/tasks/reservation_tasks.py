@@ -1,7 +1,10 @@
 import logging
 from app.core.celery_app import celery_app
 from app.database import get_db_cursor
-from app.redis_client import clear_ticket_cache
+
+# 🚀 FIXED: Added waitlist and ES sync imports
+from app.redis_client import clear_ticket_cache, pop_from_waitlist
+from app.es_client import update_ticket_capacity_in_es
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +40,6 @@ def cancel_expired_reservation_task(
     """15-minute auto-cancellation task"""
     try:
         with get_db_cursor() as cursor:
-            # Check if the reservation is still pending before cancelling
             select_reservation_status_query = (
                 "SELECT status FROM reservations WHERE reservation_id = %s "
                 "FOR UPDATE;"
@@ -46,30 +48,42 @@ def cancel_expired_reservation_task(
             res = cursor.fetchone()
 
             if res and res["status"] == "pending":
-                # Update the reservation status to 'cancelled'
                 cursor.execute(
                     "UPDATE reservations SET status = 'cancelled' "
                     "WHERE reservation_id = %s;",
                     (reservation_id,),
                 )
 
-                # Update the ticket's remaining capacity
+                # 🚀 FIXED: Return the new capacity directly from the UPDATE
                 update_ticket_capacity_query = (
                     "UPDATE tickets SET remaining_capacity = "
-                    "remaining_capacity + 1 WHERE ticket_id = %s;"
+                    "remaining_capacity + 1 WHERE ticket_id = %s "
+                    "RETURNING remaining_capacity;"
                 )
                 cursor.execute(update_ticket_capacity_query, (ticket_id,))
+                new_cap_row = cursor.fetchone()
+                new_cap = (
+                    new_cap_row["remaining_capacity"]
+                    if new_cap_row
+                    else 0
+                )
 
                 cursor.connection.commit()
 
-                # Clear ticket cache after updating remaining capacity
+                # 🚀 REAL-TIME SYNCS (Fixed Technical Debt)
+                # 1. Update ElasticSearch capacity
+                update_ticket_capacity_in_es(ticket_id, new_cap)
+                # 2. Notify the waitlist users
+                pop_from_waitlist(ticket_id)
+                # 3. Clear ticket cache
                 clear_ticket_cache()
 
                 logger.info(
                     "🚫 [EXPIRED] Reservation %s for user %s expired "
-                    "and was auto-cancelled.",
+                    "and was auto-cancelled. Cap restored to %s.",
                     reservation_id,
                     user_id,
+                    new_cap
                 )
     except Exception as e:
         logger.error("Error in auto-cancellation task phase: %s", str(e))

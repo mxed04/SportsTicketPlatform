@@ -6,7 +6,11 @@ from app.schemas.admin import (
     AdminManageRequest,
     AdminReportReplyRequest,
     DashboardStatsResponse,
+    TicketCreateRequest,  # 🚀 NEW: Import Schema
 )
+
+# 🚀 NEW: Import ES syncing helpers
+from app.es_client import index_ticket_in_es, delete_ticket_in_es
 
 router = APIRouter(prefix="/api/admin", tags=["Admin Dashboard"])
 
@@ -37,16 +41,9 @@ def verify_admin_or_support_role(
 def get_dashboard_stats(
     user_id: int = Depends(verify_admin_or_support_role),
 ):
-    """
-    Fetches high-level analytics for the admin dashboard.
-    Utilizes the Materialized View for O(1) read performance.
-    """
     try:
         with get_db_cursor() as cursor:
-            # 1. Refresh the materialized view concurrently (No table locks)
             cursor.execute("SELECT refresh_admin_dashboard_mview();")
-
-            # 2. Fetch the pre-calculated aggregated statistics
             cursor.execute(
                 "SELECT total_revenue, total_tickets_sold, "
                 "total_cancellations, pending_reports "
@@ -54,7 +51,6 @@ def get_dashboard_stats(
             )
             stats = cursor.fetchone()
 
-            # Fallback to 0 if the view is completely empty
             if not stats:
                 return {
                     "total_revenue": 0.0,
@@ -78,13 +74,12 @@ def get_dashboard_stats(
 
 @router.get(
     "/reports",
-    response_model=list[dict],  # Bypass strict schema for NULL responses
+    response_model=list[dict],
     status_code=status.HTTP_200_OK,
 )
 def get_all_reports_for_admin(
     user_id: int = Depends(verify_admin_or_support_role),
 ):
-    """Retrieves all support reports with user details for admins."""
     try:
         with get_db_cursor() as cursor:
             cursor.execute(
@@ -122,7 +117,6 @@ def reply_to_report(
     data: AdminReportReplyRequest,
     user_id: int = Depends(verify_admin_or_support_role),
 ):
-    """Allows admin/support to reply to a user's report."""
     try:
         with get_db_cursor() as cursor:
             cursor.execute(
@@ -159,7 +153,6 @@ def manage_entity(
     data: AdminManageRequest,
     user_id: int = Depends(verify_admin_or_support_role),
 ):
-    """General endpoint for admins to manually override statuses."""
     if data.entity_type == "report":
         valid_statuses = ["under_review", "resolved", "closed"]
         if data.new_status not in valid_statuses:
@@ -210,12 +203,10 @@ def manage_entity(
 @router.get(
     "/users",
     status_code=status.HTTP_200_OK,
-    summary="Get list of all users for admin dashboard",
 )
 def get_all_users(
     user_id: int = Depends(verify_admin_or_support_role),
 ):
-    """Retrieves all registered users for administrative viewing."""
     try:
         with get_db_cursor() as cursor:
             cursor.execute(
@@ -234,12 +225,10 @@ def get_all_users(
 @router.get(
     "/tickets",
     status_code=status.HTTP_200_OK,
-    summary="Get list of all tickets for admin dashboard",
 )
 def get_all_tickets_admin(
     user_id: int = Depends(verify_admin_or_support_role),
 ):
-    """Retrieves all sports events and tickets for admin viewing."""
     try:
         with get_db_cursor() as cursor:
             cursor.execute(
@@ -253,3 +242,93 @@ def get_all_tickets_admin(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e),
         )
+
+
+# 🚀 NEW: Admin Ticket Creation Route with Two-Way ES Sync
+@router.post(
+    "/tickets",
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a new ticket and sync to ElasticSearch",
+)
+def create_ticket(
+    data: TicketCreateRequest,
+    user_id: int = Depends(verify_admin_or_support_role),
+):
+    try:
+        with get_db_cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO tickets (
+                    home_team, away_team, sport_type, ticket_tier,
+                    organizer, venue_name, city, match_date,
+                    price, remaining_capacity, is_active, created_at
+                ) VALUES (
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, true, NOW()
+                ) RETURNING ticket_id;
+                """,
+                (
+                    data.home_team, data.away_team, data.sport_type,
+                    data.ticket_tier, data.organizer, data.venue_name,
+                    data.city, data.match_date, data.price,
+                    data.remaining_capacity
+                )
+            )
+            new_ticket = cursor.fetchone()
+            ticket_id = new_ticket["ticket_id"]
+            cursor.connection.commit()
+
+            # 🚀 Sync to ElasticSearch immediately
+            es_doc = {
+                "ticket_id": ticket_id,
+                "home_team": data.home_team,
+                "away_team": data.away_team,
+                "title": f"{data.home_team} vs {data.away_team}",
+                "venue_name": data.venue_name,
+                "sport_type": data.sport_type,
+                "match_date": data.match_date.isoformat(),
+                "price": float(data.price),
+                "remaining_capacity": data.remaining_capacity,
+                "is_active": True,
+            }
+            index_ticket_in_es(ticket_id, es_doc)
+
+            return {
+                "message": "Ticket created and synced successfully.",
+                "ticket_id": ticket_id
+            }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# 🚀 NEW: Admin Ticket Deletion Route with Two-Way ES Sync
+@router.delete(
+    "/tickets/{ticket_id}",
+    status_code=status.HTTP_200_OK,
+    summary="Delete a ticket and remove from ElasticSearch",
+)
+def delete_ticket(
+    ticket_id: int,
+    user_id: int = Depends(verify_admin_or_support_role),
+):
+    try:
+        with get_db_cursor() as cursor:
+            cursor.execute(
+                "DELETE FROM tickets WHERE ticket_id = %s "
+                "RETURNING ticket_id;",
+                (ticket_id,)
+            )
+            deleted = cursor.fetchone()
+            if not deleted:
+                raise HTTPException(
+                    status_code=404, detail="Ticket not found."
+                )
+            cursor.connection.commit()
+
+            # 🚀 Remove from ElasticSearch immediately
+            delete_ticket_in_es(ticket_id)
+
+            return {"message": f"Ticket {ticket_id} deleted permanently."}
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=str(e))

@@ -4,12 +4,10 @@ from elasticsearch import Elasticsearch
 
 logger = logging.getLogger(__name__)
 
-# Fetch Elasticsearch URL from environment variables
 ELASTICSEARCH_URL = os.getenv(
     "ELASTICSEARCH_URL", "http://elasticsearch:9200"
 )
 
-# Initialize the Elasticsearch client
 es = Elasticsearch(ELASTICSEARCH_URL)
 
 INDEX_NAME = "tickets"
@@ -119,7 +117,8 @@ def delete_ticket_in_es(ticket_id: int):
     Remove a ticket from Elasticsearch.
     """
     try:
-        es.delete(index=INDEX_NAME, id=str(ticket_id))
+        # Ignore 404 if it's already deleted
+        es.delete(index=INDEX_NAME, id=str(ticket_id), ignore_status=[404])
         logger.info(f"🗑️ ES Sync: Ticket {ticket_id} deleted.")
     except Exception as e:
         logger.error(f"❌ ES Deletion failed for ticket {ticket_id}: {e}")
