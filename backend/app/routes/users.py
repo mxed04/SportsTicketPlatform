@@ -32,7 +32,9 @@ def get_user_profile(user_id: int = Depends(get_current_user_id)):
             )
             user = cursor.fetchone()
             if not user:
-                raise HTTPException(status_code=404, detail="User not found")
+                raise HTTPException(
+                    status_code=404, detail="User not found"
+                )
 
             redis_client.setex(cache_key, 1200, json.dumps(user))
             return {"user": user}
@@ -42,7 +44,7 @@ def get_user_profile(user_id: int = Depends(get_current_user_id)):
 
 @router.get(
     "/bookings",
-    response_model=list[dict],  # 🛡️ FIXED: Bypass strict schema validation
+    response_model=list[dict],
     status_code=status.HTTP_200_OK,
     summary="Get booking history and dynamically generate E-Tickets",
 )
@@ -56,7 +58,8 @@ def get_user_bookings(user_id: int = Depends(get_current_user_id)):
                        p.status AS payment_status,
                        p.amount AS amount_paid,
                        p.payment_id,
-                       r.reserved_at
+                       r.reserved_at,
+                       r.expires_at  -- 🚀 FIXED: Added expires_at
                 FROM reservations r
                 JOIN tickets t ON r.ticket_id = t.ticket_id
                 LEFT JOIN payments p ON r.reservation_id = p.reservation_id
@@ -78,11 +81,11 @@ def get_user_bookings(user_id: int = Depends(get_current_user_id)):
                     "amount_paid": float(r["amount_paid"])
                     if r["amount_paid"] else None,
                     "reserved_at": r["reserved_at"],
+                    "expires_at": r["expires_at"],  # 🚀 FIXED
                     "qr_code": None,
                     "tracking_code": None,
                 }
 
-                # 🧾 Generate QR Code and Tracking Code on the fly for paid
                 if r["payment_status"] == "successful" and r["payment_id"]:
                     pid = r["payment_id"]
                     trk = f"TRK-{pid:06d}-BK"
@@ -98,7 +101,9 @@ def get_user_bookings(user_id: int = Depends(get_current_user_id)):
                     qr = qrcode.QRCode(version=1, box_size=5, border=2)
                     qr.add_data(json.dumps(td))
                     qr.make(fit=True)
-                    img = qr.make_image(fill_color="black", back_color="white")
+                    img = qr.make_image(
+                        fill_color="black", back_color="white"
+                    )
                     buf = io.BytesIO()
                     img.save(buf, format="PNG")
                     b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
