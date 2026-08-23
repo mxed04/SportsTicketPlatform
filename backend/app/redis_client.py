@@ -2,8 +2,6 @@ import redis
 from app.config import settings
 import random
 
-# Connecting to the Redis cache. Use decode_responses to receive
-# text instead of bytes.
 try:
     redis_client = redis.Redis(
         host=settings.REDIS_HOST,
@@ -26,25 +24,21 @@ def check_redis_connection():
 
 
 def clear_ticket_cache():
-    """Delete cached ticket search queries from Redis.
-    This ensures stale search results are not served from cache.
-    """
+    """Delete cached ticket search queries and details from Redis."""
     try:
-        # Scan and delete all keys matching the ticket search pattern
+        # Clear search cache
         for key in redis_client.scan_iter("tickets:search:*"):
+            redis_client.delete(key)
+
+        # 🚀 FIXED: Clear ticket details cache to instantly sync capacity UI
+        for key in redis_client.scan_iter("ticket_detail:*"):
             redis_client.delete(key)
     except Exception as e:
         print(f"Redis cache clearing error: {e}")
 
 
-# redis_client = redis.Redis(...)
-
-
 def generate_and_set_otp(phone_number: str) -> str:
-    """Generate a random 6-digit code and store it in Redis.
-
-    The code expires after 120 seconds.
-    """
+    """Generate a random 6-digit code and store it in Redis."""
     otp_code = str(random.randint(100000, 999999))
     redis_key = f"otp:{phone_number}"
 
@@ -58,8 +52,6 @@ def verify_otp(phone_number: str, user_otp: str) -> bool:
     stored_otp = redis_client.get(redis_key)
 
     if stored_otp and stored_otp == user_otp:
-        # For preventing reuse, delete the code after successful
-        # verification (Invalidation)
         redis_client.delete(redis_key)
         return True
     return False
@@ -71,22 +63,17 @@ def invalidate_user_profile_cache(user_id: int):
     redis_client.delete(redis_key)
 
 
-# ---------------------------------------------------------
-# Waiting List (Queue) Functions for Sold-out Tickets
-# ---------------------------------------------------------
 def add_to_waitlist(ticket_id: int, user_id: int) -> int:
     """Add a user to the waitlist and return their queue position."""
     queue_key = f"waitlist:{ticket_id}"
 
-    # Check if user is already in the waitlist to prevent duplicates
     existing_users = redis_client.lrange(queue_key, 0, -1)
-    if (str(user_id).encode("utf-8") in existing_users
-            or str(user_id) in existing_users):
-        return -1  # User is already in the queue
 
-    # Add user to the end of the queue (Right Push)
+    # 🚀 FIXED: Safer string matching for decode_responses=True
+    if str(user_id) in existing_users:
+        return -1
+
     redis_client.rpush(queue_key, user_id)
-    # Return the length of the queue (which is their position)
     return redis_client.llen(queue_key)
 
 

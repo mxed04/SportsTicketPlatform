@@ -6,11 +6,9 @@ from app.database import get_db_cursor
 from app.config import settings
 from app.es_client import update_ticket_capacity_in_es
 
-# 🔴 Imported add_to_waitlist
 from app.redis_client import clear_ticket_cache, add_to_waitlist
 import logging
 
-# Importing Celery durable tasks
 from app.tasks.reservation_tasks import (
     send_payment_reminder_task,
     cancel_expired_reservation_task,
@@ -44,17 +42,18 @@ def get_current_user_id(token: str = Depends(oauth2_scheme)) -> int:
         )
 
 
+# 🚀 FIXED: Added "/" to prevent 307 Redirects and 404 Axios issues
 @router.post(
-    "",
+    "/",
     response_model=ReservationResponse,
     status_code=status.HTTP_201_CREATED,
 )
-def create_reservation(data: ReservationRequest, user_id: int =
-                       Depends(get_current_user_id)):
+def create_reservation(
+    data: ReservationRequest,
+    user_id: int = Depends(get_current_user_id)
+):
     try:
         with get_db_cursor() as cursor:
-            # 🛡️ REAL-WORLD FEATURE: Anti-Hoarding Policy
-            # Check if user already has a pending reservation for THIS ticket
             cursor.execute(
                 "SELECT reservation_id FROM reservations "
                 "WHERE user_id = %s AND ticket_id = %s "
@@ -71,7 +70,6 @@ def create_reservation(data: ReservationRequest, user_id: int =
                     ),
                 )
 
-            # Check capacity and lock ticket row
             cursor.execute(
                 "SELECT remaining_capacity, is_active FROM tickets "
                 "WHERE ticket_id = %s FOR UPDATE;",
@@ -80,14 +78,12 @@ def create_reservation(data: ReservationRequest, user_id: int =
             ticket = cursor.fetchone()
 
             if not ticket:
-                raise HTTPException(status_code=404, detail="Ticket not found")
+                raise HTTPException(status_code=404, detail="Not found")
             if not ticket["is_active"]:
-                raise HTTPException(status_code=400, detail="Ticket is"
-                                    " currently inactive")
+                raise HTTPException(
+                    status_code=400, detail="Ticket is currently inactive"
+                )
 
-            # ... (بقیه کدهای تابع مثل کاهش ظرفیت و صف انتظار دست نخورده
-            # باقی بماند) ...
-            # 🔴 Updated: Point user to waitlist if sold out
             if ticket["remaining_capacity"] < 1:
                 raise HTTPException(
                     status_code=400,
@@ -136,22 +132,18 @@ def create_reservation(data: ReservationRequest, user_id: int =
             )
             reservation = cursor.fetchone()
             cursor.connection.commit()
-            # 🔴 Sync new capacity to ElasticSearch
+
             update_ticket_capacity_in_es(
                 data.ticket_id,
                 ticket["remaining_capacity"] - 1
             )
             clear_ticket_cache()
 
-            # Executing Celery tasks
-            # (sending messages to Redis)
-            # Task 1: Reminder after 13 minutes (780s)
             send_payment_reminder_task.apply_async(
                 args=[reservation["reservation_id"], user_id],
                 countdown=780,
             )
 
-            # Task 2: Cancel after 15 minutes (900s)
             cancel_expired_reservation_task.apply_async(
                 args=[
                     reservation["reservation_id"],
@@ -181,14 +173,12 @@ def create_reservation(data: ReservationRequest, user_id: int =
         )
 
 
-# 🔴 NEW ENDPOINT: Join waitlist for sold out tickets
+# 🚀 FIXED: Added "/" to prevent routing issues
 @router.post(
-    "waitlist",
+    "/waitlist",
     response_model=dict,
     status_code=status.HTTP_200_OK,
-    summary=(
-        "Join the waiting list for a sold-out ticket"
-    ),
+    summary="Join the waiting list for a sold-out ticket",
 )
 def join_waitlist(
     data: ReservationRequest,
@@ -196,7 +186,6 @@ def join_waitlist(
 ):
     try:
         with get_db_cursor() as cursor:
-            # Check if ticket actually exists and is sold out
             cursor.execute(
                 "SELECT remaining_capacity, is_active FROM "
                 "tickets WHERE ticket_id = %s;",
@@ -223,7 +212,6 @@ def join_waitlist(
                     ),
                 )
 
-            # Add to Redis Queue
             position = add_to_waitlist(data.ticket_id, user_id)
             if position == -1:
                 raise HTTPException(

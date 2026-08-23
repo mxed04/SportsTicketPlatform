@@ -367,17 +367,35 @@ export default function Dashboard() {
                     </div>
                   </div>
 
-                  <button
-                    onClick={() => navigate(`/tickets/${ticketId}`)}
-                    className={
-                      "w-full bg-gradient-to-r from-indigo-600 " +
-                      "to-blue-600 hover:from-indigo-500 text-white " +
-                      "font-bold py-3.5 rounded-xl transition-all " +
-                      "text-xs uppercase tracking-wider mt-6"
-                    }
-                  >
-                    Reserve Ticket →
-                  </button>
+                  {/* 🚀 FIXED: Added Sold Out UI state to Dashboard cards */}
+                  {remaining > 0 ? (
+                    <button
+                      onClick={() => navigate(`/tickets/${ticketId}`)}
+                      className={
+                        "w-full bg-gradient-to-r from-indigo-600 " +
+                        "to-blue-600 hover:from-indigo-500 text-white " +
+                        "font-bold py-3.5 rounded-xl transition-all " +
+                        "text-xs uppercase tracking-wider mt-6"
+                      }
+                    >
+                      Reserve Ticket →
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => navigate(`/tickets/${ticketId}`)}
+                      className={
+                        "w-full bg-rose-500/10 hover:bg-rose-500/20 " +
+                        "text-rose-400 border border-rose-500/20 font-bold " +
+                        "py-3.5 rounded-xl transition-all text-xs uppercase " +
+                        "tracking-wider mt-6 flex justify-center " +
+                        "items-center gap-2"
+                      }
+                    >
+                      🚫 Sold Out <span className="text-gray-500 font-normal">
+                        |
+                      </span> 🔔 Waitlist
+                    </button>
+                  )}
                 </div>
               );
             })}

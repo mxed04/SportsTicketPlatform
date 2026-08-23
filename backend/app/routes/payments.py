@@ -17,8 +17,9 @@ from app.es_client import update_ticket_capacity_in_es
 router = APIRouter(prefix="/api/payments", tags=["Payments"])
 
 
+# 🚀 FIXED: Added explicit "/" to prevent 307 Redirect / 404 issues
 @router.post(
-    "",
+    "/",
     response_model=PaymentResponse,
     status_code=status.HTTP_201_CREATED,
 )
@@ -28,7 +29,6 @@ def process_payment(
 ):
     try:
         with get_db_cursor() as cursor:
-            # 1. Check if user is active
             cursor.execute(
                 "SELECT is_active FROM users WHERE user_id = %s;",
                 (user_id,),
@@ -37,7 +37,6 @@ def process_payment(
             if not user or not user["is_active"]:
                 raise HTTPException(status_code=403, detail="Inactive user")
 
-            # 2. Lock the reservation (Pessimistic Locking)
             cursor.execute(
                 """
                 SELECT r.reservation_id, r.status, r.expires_at,
@@ -61,14 +60,12 @@ def process_payment(
             if res["is_expired"]:
                 raise HTTPException(status_code=400, detail="Expired")
 
-            # 3. 🛡️ Anti-Glitch Surge Pricing Logic
             base_price = float(res["price"])
             cap = res["remaining_capacity"]
 
             is_surge = (cap + 1) < 1000
             final_price = base_price * 1.15 if is_surge else base_price
 
-            # 4. Insert payment with EXACT final price
             cursor.execute(
                 """
                 INSERT INTO payments
@@ -86,7 +83,6 @@ def process_payment(
             )
             payment = cursor.fetchone()
 
-            # 5. Update reservation status
             cursor.execute(
                 "UPDATE reservations SET status = 'paid' "
                 "WHERE reservation_id = %s;",
@@ -94,18 +90,15 @@ def process_payment(
             )
             cursor.connection.commit()
 
-            # 🧾 6. DETERMINISTIC Bank Tracking Code (No DB Change Required)
             pid = payment["payment_id"]
             tracking_code = f"TRK-{pid:06d}-BK"
 
-            # 🚀 7. Sync capacity with ES and clear cache
             try:
                 update_ticket_capacity_in_es(res["ticket_id"], cap)
                 clear_ticket_cache()
             except Exception:
                 pass
 
-            # 8. Generate QR Code
             ticket_data = {
                 "reservation_id": data.reservation_id,
                 "ticket_id": res["ticket_id"],
@@ -200,8 +193,9 @@ def calculate_cancellation_penalty(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# 🚀 FIXED: Added explicit "/" to prevent 307 Redirect / 404 issues
 @router.post(
-    "/cancel",
+    "/cancel/",
     response_model=dict,
 )
 def cancel_ticket(
