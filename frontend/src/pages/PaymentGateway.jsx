@@ -111,8 +111,8 @@ export default function PaymentGateway() {
     await new Promise(resolve => setTimeout(resolve, 2500));
     
     try {
-      // Send payment confirmation to BACKEND (which validates against Redis TTL)
-      await api.post('/payments', {
+      // 🚀 FIXED: Added trailing slash to match backend strictly
+      await api.post('/payments/', {
         reservation_id: Number(reservationId),
         payment_method: 'online_gateway'
       });
@@ -130,7 +130,8 @@ export default function PaymentGateway() {
     if(!window.confirm('Are you sure you want to cancel this secure payment process?')) return;
     setProcessing(true);
     try {
-      await api.post('/payments/cancel', {
+      // 🚀 FIXED: Added trailing slash to match backend strictly
+      await api.post('/payments/cancel/', {
         reservation_id: Number(reservationId)
       });
       toast.success('Reservation cancelled successfully.');
