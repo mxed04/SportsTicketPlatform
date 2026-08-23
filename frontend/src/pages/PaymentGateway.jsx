@@ -111,8 +111,8 @@ export default function PaymentGateway() {
     await new Promise(resolve => setTimeout(resolve, 2500));
     
     try {
-      // 🚀 FIXED: Added trailing slash to match backend strictly
-      await api.post('/payments/', {
+      // 🚀 FIXED: Reverted to without trailing slash
+      await api.post('/payments', {
         reservation_id: Number(reservationId),
         payment_method: 'online_gateway'
       });
@@ -120,18 +120,22 @@ export default function PaymentGateway() {
       navigate('/profile');
     } catch (err) {
       const detail = err.response?.data?.detail;
-      toast.error(typeof detail === 'string' ? detail : 'Transaction failed. Please try again.');
+      toast.error(
+        typeof detail === 'string' 
+          ? detail 
+          : 'Transaction failed. Please try again.'
+      );
     } finally {
       setProcessing(false);
     }
   };
 
   const handleCancel = async () => {
-    if(!window.confirm('Are you sure you want to cancel this secure payment process?')) return;
+    if(!window.confirm('Cancel this secure payment process?')) return;
     setProcessing(true);
     try {
-      // 🚀 FIXED: Added trailing slash to match backend strictly
-      await api.post('/payments/cancel/', {
+      // 🚀 FIXED: Reverted to without trailing slash
+      await api.post('/payments/cancel', {
         reservation_id: Number(reservationId)
       });
       toast.success('Reservation cancelled successfully.');

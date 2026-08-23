@@ -1,14 +1,14 @@
 from fastapi import APIRouter, HTTPException, status, Depends
 from fastapi.security import OAuth2PasswordBearer
 from jose import jwt, JWTError
-from app.schemas.reservations import ReservationRequest, ReservationResponse
+from app.schemas.reservations import (
+    ReservationRequest, ReservationResponse
+)
 from app.database import get_db_cursor
 from app.config import settings
 from app.es_client import update_ticket_capacity_in_es
-
 from app.redis_client import clear_ticket_cache, add_to_waitlist
 import logging
-
 from app.tasks.reservation_tasks import (
     send_payment_reminder_task,
     cancel_expired_reservation_task,
@@ -42,9 +42,9 @@ def get_current_user_id(token: str = Depends(oauth2_scheme)) -> int:
         )
 
 
-# 🚀 FIXED: Added "/" to prevent 307 Redirects and 404 Axios issues
+# 🚀 FIXED: Reverted to "" to match exact Axios call and fix 404 Routing Error
 @router.post(
-    "/",
+    "",
     response_model=ReservationResponse,
     status_code=status.HTTP_201_CREATED,
 )
@@ -64,9 +64,8 @@ def create_reservation(
                 raise HTTPException(
                     status_code=400,
                     detail=(
-                        "Anti-Hoarding Policy: You already have a pending "
-                        "reservation for this event. Please complete or "
-                        "cancel it first."
+                        "Anti-Hoarding Policy: You already have a "
+                        "pending reservation for this event."
                     ),
                 )
 
@@ -78,10 +77,12 @@ def create_reservation(
             ticket = cursor.fetchone()
 
             if not ticket:
-                raise HTTPException(status_code=404, detail="Not found")
+                raise HTTPException(
+                    status_code=404, detail="Not found"
+                )
             if not ticket["is_active"]:
                 raise HTTPException(
-                    status_code=400, detail="Ticket is currently inactive"
+                    status_code=400, detail="Ticket is inactive"
                 )
 
             if ticket["remaining_capacity"] < 1:
@@ -93,41 +94,30 @@ def create_reservation(
                     ),
                 )
 
-            reservation_check_query = (
+            cursor.execute(
                 "SELECT reservation_id FROM reservations "
                 "WHERE user_id = %s AND ticket_id = %s AND "
-                "status IN ('pending', 'paid');"
-            )
-            cursor.execute(
-                reservation_check_query,
+                "status IN ('pending', 'paid');",
                 (user_id, data.ticket_id),
             )
             if cursor.fetchone():
                 raise HTTPException(
                     status_code=400,
-                    detail=(
-                        "You already have an active "
-                        "reservation for this ticket"
-                    ),
+                    detail="You already have an active reservation.",
                 )
 
-            update_ticket_query = (
-                "UPDATE tickets "
-                "SET remaining_capacity = "
-                "remaining_capacity - 1 "
-                "WHERE ticket_id = %s;"
+            cursor.execute(
+                "UPDATE tickets SET remaining_capacity = "
+                "remaining_capacity - 1 WHERE ticket_id = %s;",
+                (data.ticket_id,)
             )
-            cursor.execute(update_ticket_query, (data.ticket_id,))
 
-            insert_reservation_query = (
+            cursor.execute(
                 "INSERT INTO reservations "
                 "(user_id, ticket_id, status, expires_at) "
                 "VALUES (%s, %s, 'pending', "
                 "NOW() + INTERVAL '15 minutes') "
-                "RETURNING reservation_id, expires_at;"
-            )
-            cursor.execute(
-                insert_reservation_query,
+                "RETURNING reservation_id, expires_at;",
                 (user_id, data.ticket_id),
             )
             reservation = cursor.fetchone()
@@ -157,10 +147,7 @@ def create_reservation(
                 "reservation_id": reservation["reservation_id"],
                 "ticket_id": data.ticket_id,
                 "status": "pending",
-                "message": (
-                    "Ticket successfully reserved for "
-                    "15 minutes."
-                ),
+                "message": "Ticket reserved for 15 minutes.",
                 "expires_at": reservation["expires_at"],
             }
 
@@ -173,7 +160,7 @@ def create_reservation(
         )
 
 
-# 🚀 FIXED: Added "/" to prevent routing issues
+# 🚀 FIXED: Reverted to "/waitlist" without trailing slash
 @router.post(
     "/waitlist",
     response_model=dict,
@@ -206,30 +193,21 @@ def join_waitlist(
             if ticket["remaining_capacity"] > 0:
                 raise HTTPException(
                     status_code=400,
-                    detail=(
-                        "Ticket is not sold out yet! "
-                        "You can reserve it directly."
-                    ),
+                    detail="Ticket is not sold out yet!",
                 )
 
             position = add_to_waitlist(data.ticket_id, user_id)
             if position == -1:
                 raise HTTPException(
                     status_code=400,
-                    detail=(
-                        "You are already in the waiting list "
-                        "for this ticket."
-                    ),
+                    detail="You are already in the waiting list.",
                 )
 
             return {
                 "message": "Successfully joined the waiting list.",
                 "ticket_id": data.ticket_id,
                 "your_position_in_queue": position,
-                "note": (
-                    "We will notify you if a ticket "
-                    "becomes available."
-                ),
+                "note": "We will notify you if a seat opens.",
             }
 
     except Exception as e:

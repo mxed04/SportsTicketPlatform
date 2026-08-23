@@ -17,9 +17,9 @@ from app.es_client import update_ticket_capacity_in_es
 router = APIRouter(prefix="/api/payments", tags=["Payments"])
 
 
-# 🚀 FIXED: Added explicit "/" to prevent 307 Redirect / 404 issues
+# 🚀 FIXED: Reverted to "" to match exact Axios call
 @router.post(
-    "/",
+    "",
     response_model=PaymentResponse,
     status_code=status.HTTP_201_CREATED,
 )
@@ -35,7 +35,9 @@ def process_payment(
             )
             user = cursor.fetchone()
             if not user or not user["is_active"]:
-                raise HTTPException(status_code=403, detail="Inactive user")
+                raise HTTPException(
+                    status_code=403, detail="Inactive user"
+                )
 
             cursor.execute(
                 """
@@ -51,14 +53,24 @@ def process_payment(
             )
             res = cursor.fetchone()
 
+            # 🚀 FIXED: Descriptive IDOR / Missing error message
             if not res:
-                raise HTTPException(status_code=404, detail="Not found")
+                raise HTTPException(
+                    status_code=404,
+                    detail="Reservation not found or access denied."
+                )
             if res["status"] == "paid":
-                raise HTTPException(status_code=400, detail="Already paid")
+                raise HTTPException(
+                    status_code=400, detail="Already paid"
+                )
             if res["status"] == "cancelled":
-                raise HTTPException(status_code=400, detail="Cancelled")
+                raise HTTPException(
+                    status_code=400, detail="Cancelled"
+                )
             if res["is_expired"]:
-                raise HTTPException(status_code=400, detail="Expired")
+                raise HTTPException(
+                    status_code=400, detail="Expired"
+                )
 
             base_price = float(res["price"])
             cap = res["remaining_capacity"]
@@ -69,8 +81,8 @@ def process_payment(
             cursor.execute(
                 """
                 INSERT INTO payments
-                (reservation_id, user_id, amount, payment_method, status,
-                 paid_at)
+                (reservation_id, user_id, amount, payment_method,
+                 status, paid_at)
                 VALUES (%s, %s, %s, %s, 'successful', NOW())
                 RETURNING payment_id, paid_at, amount;
                 """,
@@ -168,7 +180,9 @@ def calculate_cancellation_penalty(
 
             now = datetime.now()
             if meta["match_date"] <= now and meta["status"] == "paid":
-                raise HTTPException(status_code=400, detail="Match started")
+                raise HTTPException(
+                    status_code=400, detail="Match started"
+                )
 
             diff = (meta["match_date"] - now).total_seconds()
             hours_until = diff / 3600 if diff > 0 else 0
@@ -177,7 +191,9 @@ def calculate_cancellation_penalty(
             if fin["penalty_amount"] > 0:
                 total = fin["refund_amount"] + fin["penalty_amount"]
                 if total > 0:
-                    penalty_pct = int((fin["penalty_amount"] / total) * 100)
+                    penalty_pct = int(
+                        (fin["penalty_amount"] / total) * 100
+                    )
 
             return {
                 "reservation_id": reservation_id,
@@ -193,9 +209,8 @@ def calculate_cancellation_penalty(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# 🚀 FIXED: Added explicit "/" to prevent 307 Redirect / 404 issues
 @router.post(
-    "/cancel/",
+    "/cancel",
     response_model=dict,
 )
 def cancel_ticket(
@@ -215,7 +230,10 @@ def cancel_ticket(
             res = cursor.fetchone()
 
             if not res:
-                raise HTTPException(status_code=404, detail="Not found")
+                raise HTTPException(
+                    status_code=404,
+                    detail="Reservation not found or access denied."
+                )
 
             if res["status"] == "cancelled":
                 return {
@@ -225,7 +243,9 @@ def cancel_ticket(
                 }
 
             if res["status"] not in ["paid", "pending"]:
-                raise HTTPException(status_code=400, detail="Invalid status")
+                raise HTTPException(
+                    status_code=400, detail="Invalid status"
+                )
 
             is_pending = res["status"] == "pending"
 
@@ -257,7 +277,9 @@ def cancel_ticket(
             )
             cursor.connection.commit()
 
-            update_ticket_capacity_in_es(res["ticket_id"], current_cap + 1)
+            update_ticket_capacity_in_es(
+                res["ticket_id"], current_cap + 1
+            )
             clear_ticket_cache()
             pop_from_waitlist(res["ticket_id"])
 
