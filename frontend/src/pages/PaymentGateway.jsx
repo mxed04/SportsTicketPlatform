@@ -13,14 +13,12 @@ export default function PaymentGateway() {
   const [loadingDetails, setLoadingDetails] = useState(true);
 
   const [processing, setProcessing] = useState(false);
-  // 🚀 FIXED: Start at 0 to sync dynamically with the database timestamp
   const [timeLeft, setTimeLeft] = useState(0);
 
   useEffect(() => {
     const fetchReservationData = async () => {
       setLoadingDetails(true);
       try {
-        // 🚀 ALWAYS fetch backend to securely get expires_at
         const bRes = await api.get('/user/bookings');
         const rawData = bRes.data?.bookings || bRes.data || [];
         const bookingsList = Array.isArray(rawData) ? rawData : [];
@@ -48,7 +46,6 @@ export default function PaymentGateway() {
           return;
         }
 
-        // 🚀 FIXED: Calculate exact time left from DB expires_at
         if (currentRes.expires_at) {
           let expStr = currentRes.expires_at;
           if (!expStr.endsWith('Z')) expStr += 'Z';
@@ -64,17 +61,9 @@ export default function PaymentGateway() {
           setFinalPrice(location.state.finalPrice);
           setTitle(location.state.title);
         } else {
-          const tId = currentRes.ticket_id ||
-                      (currentRes.ticket && currentRes.ticket.id);
-          if (tId) {
-            const tRes = await api.get(`/tickets/${tId}`);
-            const tData = tRes.data?.ticket || tRes.data;
-            setFinalPrice(tData.price || 0);
-            setTitle(`${tData.home_team} vs ${tData.away_team}`);
-          } else {
-            setFinalPrice(currentRes.amount || currentRes.price || 0);
-            setTitle(currentRes.title || 'Event Ticket');
-          }
+          // 🚀 FIXED: Directly pull the accurate final price (Surge) from payload
+          setFinalPrice(currentRes.final_price || currentRes.amount_paid || 0);
+          setTitle(`${currentRes.home_team} vs ${currentRes.away_team}`);
         }
       } catch (err) {
         console.error('Payment fetch error:', err);

@@ -51,15 +51,17 @@ def get_user_profile(user_id: int = Depends(get_current_user_id)):
 def get_user_bookings(user_id: int = Depends(get_current_user_id)):
     try:
         with get_db_cursor() as cursor:
+            # 🚀 FIXED: Joined price, venue_name, and capacity
             query = """
                 SELECT r.reservation_id, r.ticket_id, t.home_team,
-                       t.away_team, t.match_date,
+                       t.away_team, t.match_date, t.venue_name,
+                       t.price, t.remaining_capacity,
                        r.status AS reservation_status,
                        p.status AS payment_status,
                        p.amount AS amount_paid,
                        p.payment_id,
                        r.reserved_at,
-                       r.expires_at  -- 🚀 FIXED: Added expires_at
+                       r.expires_at
                 FROM reservations r
                 JOIN tickets t ON r.ticket_id = t.ticket_id
                 LEFT JOIN payments p ON r.reservation_id = p.reservation_id
@@ -70,18 +72,33 @@ def get_user_bookings(user_id: int = Depends(get_current_user_id)):
 
             results = []
             for r in rows:
+                # 🚀 FIXED: Calculate exact Surge Pricing
+                base_price = float(r["price"] or 0)
+                if r["reservation_status"] == "pending":
+                    cap = r["remaining_capacity"]
+                    is_surge = (cap + 1) < 1000
+                    final_price = base_price * 1.15 if is_surge else base_price
+                else:
+                    final_price = (
+                        float(r["amount_paid"])
+                        if r["amount_paid"]
+                        else base_price
+                    )
+
                 booking = {
                     "reservation_id": r["reservation_id"],
                     "ticket_id": r["ticket_id"],
                     "home_team": r["home_team"],
                     "away_team": r["away_team"],
                     "match_date": r["match_date"],
+                    "venue_name": r["venue_name"],
+                    "final_price": final_price,
                     "reservation_status": r["reservation_status"],
                     "payment_status": r["payment_status"],
                     "amount_paid": float(r["amount_paid"])
                     if r["amount_paid"] else None,
                     "reserved_at": r["reserved_at"],
-                    "expires_at": r["expires_at"],  # 🚀 FIXED
+                    "expires_at": r["expires_at"],
                     "qr_code": None,
                     "tracking_code": None,
                 }
