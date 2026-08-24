@@ -293,10 +293,14 @@ export default function Dashboard() {
               const awayTeam = ticket.away_team || 'Away Team';
               const venName = ticket.venue_name || ticket.venue || 'Venue';
               const sport = ticket.sport_type || 'Sports';
-              const price = ticket.price;
               const remaining = 
                 ticket.remaining_capacity ?? ticket.capacity ?? 0;
               const isSurge = remaining < 1000 || ticket.is_surge_pricing;
+              
+              // 🚀 FIXED: Sync UI card price logic with backend Surge logic
+              const basePrice = Number(ticket.price) || 0;
+              const finalPrice = isSurge ? basePrice * 1.15 : basePrice;
+
               const matchDate = ticket.match_date 
                 ? new Date(ticket.match_date).toLocaleDateString('en-US', { 
                     month: 'short', day: 'numeric', year: 'numeric' 
@@ -360,14 +364,14 @@ export default function Dashboard() {
                       <span 
                         className="text-base font-extrabold text-emerald-400"
                       >
-                        {price 
-                          ? `${Number(price).toLocaleString()} T` 
+                        {/* 🚀 FIXED: Render calculated Surge price */}
+                        {finalPrice > 0 
+                          ? `${Number(finalPrice).toLocaleString()} T` 
                           : 'Free'}
                       </span>
                     </div>
                   </div>
 
-                  {/* 🚀 FIXED: Added Sold Out UI state to Dashboard cards */}
                   {remaining > 0 ? (
                     <button
                       onClick={() => navigate(`/tickets/${ticketId}`)}

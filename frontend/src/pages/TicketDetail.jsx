@@ -34,8 +34,6 @@ export default function TicketDetail() {
   const [ticket, setTicket] = useState(null);
   const [loading, setLoading] = useState(true);
   const [reserving, setReserving] = useState(false);
-  
-  // 🚀 NEW: Waitlist state
   const [joiningWaitlist, setJoiningWaitlist] = useState(false);
 
   const userRole = getUserRole();
@@ -76,7 +74,11 @@ export default function TicketDetail() {
       const homeTeam = ticket?.home_team || 'Home';
       const awayTeam = ticket?.away_team || 'Away';
       const title = `${homeTeam} vs ${awayTeam}`;
-      const finalPrice = ticket?.price || 0;
+      
+      // 🚀 FIXED: Calculate exact surge price to pass to Payment Gateway
+      const basePrice = Number(ticket?.price) || 0;
+      const cap = ticket?.remaining_capacity ?? ticket?.capacity ?? 0;
+      const finalPrice = cap < 1000 ? basePrice * 1.15 : basePrice;
 
       navigate(`/payment/${reservationId}`, {
         state: { finalPrice, title, ticketId: id },
@@ -93,7 +95,6 @@ export default function TicketDetail() {
     }
   };
 
-  // 🚀 NEW: Waitlist Handler
   const handleJoinWaitlist = async () => {
     if (isAdminOrSupport) {
       toast.error('Admins and support cannot join waitlists.');
@@ -141,8 +142,13 @@ export default function TicketDetail() {
   const awayTeam = ticket.away_team || 'Away Team';
   const venue = ticket.venue_name || ticket.venue || 'Stadium';
   const sport = ticket.sport_type || 'Sports';
-  const price = ticket.price;
   const capacity = ticket.remaining_capacity ?? ticket.capacity ?? 0;
+  
+  // 🚀 FIXED: Sync UI price logic with backend Surge logic
+  const basePrice = Number(ticket.price) || 0;
+  const isSurge = capacity < 1000;
+  const finalPrice = isSurge ? basePrice * 1.15 : basePrice;
+
   const organizer = ticket.organizer || 'Official League';
   const city = ticket.city || 'City Venue';
   const tier = ticket.ticket_tier || 'Standard';
@@ -347,8 +353,9 @@ export default function TicketDetail() {
               <span
                 className="text-lg font-black text-emerald-400 block"
               >
-                {price
-                  ? `${Number(price).toLocaleString()} Toman`
+                {/* 🚀 FIXED: Using finalPrice here */}
+                {finalPrice > 0
+                  ? `${Number(finalPrice).toLocaleString()} Toman`
                   : 'Free Entry'}
               </span>
             </div>
