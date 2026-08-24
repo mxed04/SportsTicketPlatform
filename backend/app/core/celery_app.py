@@ -11,6 +11,8 @@ celery_app = Celery(
     "sports_ticket_worker",
     broker=REDIS_URL,
     backend=REDIS_URL,
+    # 🚀 FIXED: Explicitly tell Celery where to find and register the tasks
+    include=["app.tasks.reservation_tasks"],
 )
 
 celery_app.conf.update(
