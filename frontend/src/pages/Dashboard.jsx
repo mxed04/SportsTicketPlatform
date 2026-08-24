@@ -297,9 +297,8 @@ export default function Dashboard() {
                 ticket.remaining_capacity ?? ticket.capacity ?? 0;
               const isSurge = remaining < 1000 || ticket.is_surge_pricing;
               
-              // 🚀 FIXED: Sync UI card price logic with backend Surge logic
-              const basePrice = Number(ticket.price) || 0;
-              const finalPrice = isSurge ? basePrice * 1.15 : basePrice;
+              // 🚀 RESTORED: Directly use the backend price
+              const price = ticket.price;
 
               const matchDate = ticket.match_date 
                 ? new Date(ticket.match_date).toLocaleDateString('en-US', { 
@@ -364,9 +363,8 @@ export default function Dashboard() {
                       <span 
                         className="text-base font-extrabold text-emerald-400"
                       >
-                        {/* 🚀 FIXED: Render calculated Surge price */}
-                        {finalPrice > 0 
-                          ? `${Number(finalPrice).toLocaleString()} T` 
+                        {price 
+                          ? `${Number(price).toLocaleString()} T` 
                           : 'Free'}
                       </span>
                     </div>

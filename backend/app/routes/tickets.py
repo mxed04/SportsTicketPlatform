@@ -63,7 +63,6 @@ def search_tickets(
                 }
             })
 
-        # 🚀 FIXED: Dynamic ES range handling for Surge Pricing (15%)
         if min_price is not None or max_price is not None:
             n_rng, s_rng = {}, {}
             if min_price is not None:
@@ -118,7 +117,9 @@ def search_tickets(
             bp = float(doc.get("price", 0))
             cap = int(doc.get("remaining_capacity", 0))
 
-            if 0 < cap < 1000:
+            # 🚀 FIXED: Removed '0 <' to ensure sold out tickets (cap=0)
+            #   retain Surge Price
+            if cap < 1000:
                 doc["price"] = round(bp * 1.15, 2)
                 doc["is_surge_pricing"] = True
             else:
@@ -170,7 +171,6 @@ def get_ticket_detail(
             if item.get("match_date"):
                 item["match_date"] = item["match_date"].isoformat()
 
-            # Ensure English defaults
             home = item.get("home_team") or "Team A"
             away = item.get("away_team") or "Team B"
             item["title"] = f"{home} vs {away}"
@@ -178,7 +178,9 @@ def get_ticket_detail(
             bp = float(item["price"])
             rem = int(item["remaining_capacity"])
 
-            if 0 < rem < 1000:
+            # 🚀 FIXED: Removed '0 <' to ensure Waitlist users
+            # see the correct Surge Price
+            if rem < 1000:
                 item["price"] = round(bp * 1.15, 2)
                 item["is_surge_pricing"] = True
             else:

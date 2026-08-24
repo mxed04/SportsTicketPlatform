@@ -73,7 +73,7 @@ def cancel_expired_reservation_task(
                     )
                     new_res = cursor.fetchone()
                     new_res_id = new_res["reservation_id"]
-                    
+
                     cursor.connection.commit()
 
                     logger.info(
@@ -90,7 +90,7 @@ def cancel_expired_reservation_task(
                         args=[new_res_id, next_user_id, ticket_id],
                         countdown=900
                     )
-                
+
                 else:
                     # 🔓 NO WAITLIST: Safely restore capacity and unlock
                     cursor.execute(
@@ -106,7 +106,7 @@ def cancel_expired_reservation_task(
                     )
 
                     cursor.connection.commit()
-                    
+
                     logger.info(
                         "🚫 [EXPIRED] Res %s cancelled. "
                         "Cap restored to %s.",

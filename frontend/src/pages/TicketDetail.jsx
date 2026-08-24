@@ -34,6 +34,7 @@ export default function TicketDetail() {
   const [ticket, setTicket] = useState(null);
   const [loading, setLoading] = useState(true);
   const [reserving, setReserving] = useState(false);
+  
   const [joiningWaitlist, setJoiningWaitlist] = useState(false);
 
   const userRole = getUserRole();
@@ -75,10 +76,8 @@ export default function TicketDetail() {
       const awayTeam = ticket?.away_team || 'Away';
       const title = `${homeTeam} vs ${awayTeam}`;
       
-      // 🚀 FIXED: Calculate exact surge price to pass to Payment Gateway
-      const basePrice = Number(ticket?.price) || 0;
-      const cap = ticket?.remaining_capacity ?? ticket?.capacity ?? 0;
-      const finalPrice = cap < 1000 ? basePrice * 1.15 : basePrice;
+      // 🚀 RESTORED: Directly use the accurate backend price
+      const finalPrice = ticket?.price || 0;
 
       navigate(`/payment/${reservationId}`, {
         state: { finalPrice, title, ticketId: id },
@@ -142,13 +141,11 @@ export default function TicketDetail() {
   const awayTeam = ticket.away_team || 'Away Team';
   const venue = ticket.venue_name || ticket.venue || 'Stadium';
   const sport = ticket.sport_type || 'Sports';
-  const capacity = ticket.remaining_capacity ?? ticket.capacity ?? 0;
   
-  // 🚀 FIXED: Sync UI price logic with backend Surge logic
-  const basePrice = Number(ticket.price) || 0;
-  const isSurge = capacity < 1000;
-  const finalPrice = isSurge ? basePrice * 1.15 : basePrice;
-
+  // 🚀 RESTORED: Directly use backend price
+  const price = ticket.price;
+  
+  const capacity = ticket.remaining_capacity ?? ticket.capacity ?? 0;
   const organizer = ticket.organizer || 'Official League';
   const city = ticket.city || 'City Venue';
   const tier = ticket.ticket_tier || 'Standard';
@@ -353,9 +350,8 @@ export default function TicketDetail() {
               <span
                 className="text-lg font-black text-emerald-400 block"
               >
-                {/* 🚀 FIXED: Using finalPrice here */}
-                {finalPrice > 0
-                  ? `${Number(finalPrice).toLocaleString()} Toman`
+                {price
+                  ? `${Number(price).toLocaleString()} Toman`
                   : 'Free Entry'}
               </span>
             </div>
