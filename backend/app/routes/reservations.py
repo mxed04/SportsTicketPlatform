@@ -42,7 +42,6 @@ def get_current_user_id(token: str = Depends(oauth2_scheme)) -> int:
         )
 
 
-# 🚀 FIXED: Reverted to "" to match exact Axios call and fix 404 Routing Error
 @router.post(
     "",
     response_model=ReservationResponse,
@@ -160,7 +159,6 @@ def create_reservation(
         )
 
 
-# 🚀 FIXED: Reverted to "/waitlist" without trailing slash
 @router.post(
     "/waitlist",
     response_model=dict,
@@ -173,6 +171,22 @@ def join_waitlist(
 ):
     try:
         with get_db_cursor() as cursor:
+            # 🚀 FIXED: Anti-Hoarding Check for Waitlist
+            cursor.execute(
+                "SELECT reservation_id FROM reservations "
+                "WHERE user_id = %s AND ticket_id = %s AND "
+                "status IN ('pending', 'paid');",
+                (user_id, data.ticket_id),
+            )
+            if cursor.fetchone():
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "Anti-Hoarding Policy: You already have an "
+                        "active reservation or ticket for this event."
+                    ),
+                )
+
             cursor.execute(
                 "SELECT remaining_capacity, is_active FROM "
                 "tickets WHERE ticket_id = %s;",
